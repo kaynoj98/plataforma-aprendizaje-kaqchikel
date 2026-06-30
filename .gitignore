@@ -1,0 +1,43 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Compilación
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Logs
+*.log
+logs/
+
+# Prisma generado
+apps/api/src/generated/
+apps/api/generated/
+
+# Archivos temporales
+tmp/
+temp/
+.cache/
+
+# Almacenamiento y respaldos
+storage/
+backups/
+infrastructure/storage/data/
+infrastructure/backups/data/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editores
+.idea/
+.vscode/settings.json

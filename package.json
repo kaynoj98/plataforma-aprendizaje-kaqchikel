@@ -1,0 +1,17 @@
+{
+  "name": "plataforma-kaqchikel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma web para el aprendizaje del idioma kaqchikel.",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @kaqchikel/web --filter @kaqchikel/api run dev",
+    "dev:web": "pnpm --filter @kaqchikel/web run dev",
+    "dev:api": "pnpm --filter @kaqchikel/api run dev",
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test"
+  }
+}
