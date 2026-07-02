@@ -1,5 +1,4 @@
-import "dotenv/config";
-import { z } from "zod";
+import { z } from "../../node_modules/zod/v4/classic/external.cjs";
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -9,14 +8,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
 
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
-
-  DATABASE_URL: z.string().min(1, {
-    message: "DATABASE_URL es obligatoria.",
-  }),
 });
-
 const result = envSchema.safeParse(process.env);
-
 if (!result.success) {
   console.error(
     "Las variables de entorno del backend no son válidas:",
