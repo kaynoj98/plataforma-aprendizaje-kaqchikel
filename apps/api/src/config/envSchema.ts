@@ -1,4 +1,4 @@
-import { z } from "../../node_modules/zod/v4/classic/external.cjs";
+import * as z from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z
