@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { z } from "zod";
+import * as z from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -14,16 +14,3 @@ const envSchema = z.object({
     message: "DATABASE_URL es obligatoria.",
   }),
 });
-
-const result = envSchema.safeParse(process.env);
-
-if (!result.success) {
-  console.error(
-    "Las variables de entorno del backend no son válidas:",
-    result.error.flatten().fieldErrors,
-  );
-
-  process.exit(1);
-}
-
-export const env = result.data;
