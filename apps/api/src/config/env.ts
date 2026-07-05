@@ -13,4 +13,18 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, {
     message: "DATABASE_URL es obligatoria.",
   }),
+
+  SESSION_DURATION_DAYS: z.coerce.number().int().min(1).max(30).default(7),
 });
+
+const result = envSchema.safeParse(process.env);
+
+if (!result.success) {
+  console.error(
+    "Las variables de entorno del backend no son válidas: ",
+    result.error.flatten().fieldErrors,
+  );
+  process.exit(1);
+}
+
+export const env = result.data;

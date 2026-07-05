@@ -8,6 +8,8 @@ import { errorHandler } from "./middlewares/error-handler.js";
 import { notFoundHandler } from "./middlewares/not-found.js";
 import { healthRouter } from "./routes/health.routes.js";
 
+import { authRouter } from "./modules/auth/auth.routes.js";
+
 export const app = express();
 
 app.disable("x-powered-by");
@@ -26,6 +28,7 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
 app.use("/api/v1/health", healthRouter);
+app.use("/api/v1/auth", authRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
