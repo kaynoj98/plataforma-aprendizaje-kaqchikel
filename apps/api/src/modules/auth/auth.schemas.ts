@@ -57,6 +57,47 @@ export const loginSchema = z
   })
   .strict();
 
-export type RegisterInput = z.infer<typeof registerSchema>;
+export const verifyEmailSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(64, "El token de confirmación no es válido.")
+      .max(256, "El token de confirmación no es válido."),
+  })
+  .strict();
 
+export const emailRequestSchema = z
+  .object({
+    email: emailSchema,
+  })
+  .strict();
+
+export const resetPasswordSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(64, "El token de recuperación no es válido.")
+      .max(256, "El token de recuperación no es válido."),
+
+    password: passwordSchema,
+
+    passwordConfirmation: z.string(),
+  })
+  .strict()
+  .superRefine((data, context) => {
+    if (data.password !== data.passwordConfirmation) {
+      context.addIssue({
+        code: "custom",
+        path: ["passwordConfirmation"],
+        message: "Las contraseñas no coinciden.",
+      });
+    }
+  });
+
+export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type EmailRequestInput = z.infer<typeof emailRequestSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

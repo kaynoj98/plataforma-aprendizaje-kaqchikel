@@ -1,12 +1,20 @@
 import argon2 from "argon2";
 
+import { env } from "../../config/env.js";
 import { AppError } from "../../errors/app-error.js";
 import { AccountStatus, ProfileType } from "../../generated/prisma/client.js";
+import { mailService } from "../../services/mail.service.js";
 import { generateSecureToken, hashToken } from "../../utils/token.js";
 
 import { createSessionExpiration } from "./auth.cookie.js";
 import { authRepository } from "./auth.repository.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
+import type {
+  EmailRequestInput,
+  LoginInput,
+  RegisterInput,
+  ResetPasswordInput,
+  VerifyEmailInput,
+} from "./auth.schemas.js";
 import type { AuthContext } from "./auth.types.js";
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -16,6 +24,46 @@ function isUniqueConstraintError(error: unknown): boolean {
     "code" in error &&
     error.code === "P2002"
   );
+}
+
+function createVerificationExpiration(): Date {
+  return new Date(
+    Date.now() + env.EMAIL_VERIFICATION_TOKEN_HOURS * 60 * 60 * 1000,
+  );
+}
+
+function createPasswordResetExpiration(): Date {
+  return new Date(Date.now() + env.PASSWORD_RESET_TOKEN_MINUTES * 60 * 1000);
+}
+
+async function sendVerificationSafely(
+  email: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    await mailService.sendEmailVerification(email, token);
+
+    return true;
+  } catch (error) {
+    console.error("No fue posible enviar el correo de confirmación:", error);
+
+    return false;
+  }
+}
+
+async function sendPasswordResetSafely(
+  email: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    await mailService.sendPasswordReset(email, token);
+
+    return true;
+  } catch (error) {
+    console.error("No fue posible enviar el correo de recuperación:", error);
+
+    return false;
+  }
 }
 
 export const authService = {
@@ -36,14 +84,30 @@ export const authService = {
       type: argon2.argon2id,
     });
 
+    const verificationToken = generateSecureToken();
+
+    const verificationTokenHash = hashToken(verificationToken);
+
     try {
-      return await authRepository.createPendingUser({
+      const user = await authRepository.createPendingUser({
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
         email,
         passwordHash,
+
         profileType: ProfileType[input.profileType],
+
+        verificationTokenHash,
+
+        verificationExpiresAt: createVerificationExpiration(),
       });
+
+      const emailSent = await sendVerificationSafely(email, verificationToken);
+
+      return {
+        user,
+        emailSent,
+      };
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         throw new AppError(
@@ -54,6 +118,152 @@ export const authService = {
       }
 
       throw error;
+    }
+  },
+
+  async verifyEmail(input: VerifyEmailInput) {
+    const result = await authRepository.consumeVerificationToken(
+      hashToken(input.token),
+      new Date(),
+    );
+
+    switch (result.status) {
+      case "INVALID":
+        throw new AppError(
+          400,
+          "INVALID_VERIFICATION_TOKEN",
+          "El enlace de confirmación no es válido.",
+        );
+
+      case "USED":
+        throw new AppError(
+          400,
+          "VERIFICATION_TOKEN_USED",
+          "El enlace de confirmación ya fue utilizado.",
+        );
+
+      case "EXPIRED":
+        throw new AppError(
+          400,
+          "VERIFICATION_TOKEN_EXPIRED",
+          "El enlace de confirmación ha expirado.",
+        );
+
+      case "ACCOUNT_UNAVAILABLE":
+        throw new AppError(
+          403,
+          "ACCOUNT_UNAVAILABLE",
+          "La cuenta no puede ser activada.",
+        );
+
+      case "SUCCESS":
+        return result.user;
+    }
+  },
+
+  async resendVerification(input: EmailRequestInput): Promise<void> {
+    const email = input.email.trim().toLowerCase();
+
+    const user = await authRepository.findVerificationUserByEmail(email);
+
+    /*
+     * Se utiliza la misma respuesta para:
+     * - Cuenta inexistente.
+     * - Cuenta activa.
+     * - Cuenta bloqueada.
+     * - Cuenta desactivada.
+     *
+     * Esto evita revelar el estado de una dirección.
+     */
+    if (
+      !user ||
+      user.status !== AccountStatus.PENDING ||
+      user.emailVerifiedAt
+    ) {
+      return;
+    }
+
+    const token = generateSecureToken();
+
+    await authRepository.replaceVerificationToken(
+      user.id,
+      hashToken(token),
+      createVerificationExpiration(),
+    );
+
+    await sendVerificationSafely(user.email, token);
+  },
+
+  async forgotPassword(input: EmailRequestInput): Promise<void> {
+    const email = input.email.trim().toLowerCase();
+
+    const user = await authRepository.findPasswordResetUserByEmail(email);
+
+    /*
+     * La respuesta será siempre general para no revelar
+     * si una cuenta existe.
+     */
+    if (
+      !user ||
+      user.status !== AccountStatus.ACTIVE ||
+      !user.emailVerifiedAt
+    ) {
+      return;
+    }
+
+    const token = generateSecureToken();
+
+    await authRepository.replacePasswordResetToken(
+      user.id,
+      hashToken(token),
+      createPasswordResetExpiration(),
+    );
+
+    await sendPasswordResetSafely(user.email, token);
+  },
+
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    const passwordHash = await argon2.hash(input.password, {
+      type: argon2.argon2id,
+    });
+
+    const result = await authRepository.consumePasswordResetToken(
+      hashToken(input.token),
+      passwordHash,
+      new Date(),
+    );
+
+    switch (result.status) {
+      case "INVALID":
+        throw new AppError(
+          400,
+          "INVALID_RESET_TOKEN",
+          "El enlace de recuperación no es válido.",
+        );
+
+      case "USED":
+        throw new AppError(
+          400,
+          "RESET_TOKEN_USED",
+          "El enlace de recuperación ya fue utilizado.",
+        );
+
+      case "EXPIRED":
+        throw new AppError(
+          400,
+          "RESET_TOKEN_EXPIRED",
+          "El enlace de recuperación ha expirado.",
+        );
+
+      case "ACCOUNT_UNAVAILABLE":
+        throw new AppError(
+          403,
+          "ACCOUNT_UNAVAILABLE",
+          "La contraseña de esta cuenta no puede restablecerse.",
+        );
+
+      case "SUCCESS":
+        return;
     }
   },
 
@@ -117,15 +327,15 @@ export const authService = {
 
     const sessionToken = generateSecureToken();
 
-    const sessionTokenHash = hashToken(sessionToken);
-
-    const expiresAt = createSessionExpiration();
-
     const session = await authRepository.createLoginSession({
       userId: user.id,
-      tokenHash: sessionTokenHash,
-      expiresAt,
+
+      tokenHash: hashToken(sessionToken),
+
+      expiresAt: createSessionExpiration(),
+
       ipAddress: metadata.ipAddress,
+
       userAgent: metadata.userAgent,
     });
 
@@ -135,6 +345,7 @@ export const authService = {
       sessionToken,
       sessionId: session.id,
       expiresAt: session.expiresAt,
+
       user: {
         ...publicUser,
         lastLoginAt: new Date(),
