@@ -155,7 +155,8 @@ model Course {
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy User @relation("CourseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy User          @relation("CourseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  levels    CourseLevel[]
 
   @@index([status])
   @@index([difficulty])
@@ -164,4 +165,72 @@ model Course {
   @@index([createdAt])
   @@index([deletedAt])
   @@map("courses")
+}
+
+model CourseLevel {
+  id          String        @id @default(uuid()) @db.Uuid
+  courseId    String        @map("course_id") @db.Uuid
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  position    Int           @default(0)
+  status      PublishStatus @default(DRAFT)
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  units  CourseUnit[]
+
+  @@index([courseId])
+  @@index([status])
+  @@index([position])
+  @@index([deletedAt])
+  @@map("course_levels")
+}
+
+model CourseUnit {
+  id          String        @id @default(uuid()) @db.Uuid
+  levelId     String        @map("level_id") @db.Uuid
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  position    Int           @default(0)
+  status      PublishStatus @default(DRAFT)
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  level   CourseLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([levelId])
+  @@index([status])
+  @@index([position])
+  @@index([deletedAt])
+  @@map("course_units")
+}
+
+model Lesson {
+  id               String        @id @default(uuid()) @db.Uuid
+  unitId           String        @map("unit_id") @db.Uuid
+  title            String        @db.VarChar(200)
+  slug             String        @db.VarChar(220)
+  description      String?       @db.Text
+  estimatedMinutes Int           @default(10) @map("estimated_minutes")
+  position         Int           @default(0)
+  status           PublishStatus @default(DRAFT)
+  publishedAt      DateTime?     @map("published_at") @db.Timestamptz(3)
+  deletedAt        DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  unit CourseUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([unitId, slug])
+  @@index([unitId])
+  @@index([status])
+  @@index([position])
+  @@index([deletedAt])
+  @@map("lessons")
 }

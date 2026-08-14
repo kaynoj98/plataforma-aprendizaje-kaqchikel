@@ -15,6 +15,12 @@ import {
   publicCourseRouter,
 } from "./modules/courses/course.routes.js";
 
+import {
+  adminLearningRouter,
+  learningRouter,
+  publicLessonRouter,
+} from "./modules/learning-structure/learning-structure.routes.js";
+
 export const app = express();
 
 app.disable("x-powered-by");
@@ -42,6 +48,9 @@ app.use("/api/v1/admin/courses", adminCourseRouter);
 app.use("/api/v1/public/courses", publicCourseRouter);
 app.use("/api/v1/courses", courseRouter);
 app.use("/api/v1/admin/courses", adminCourseRouter);
+app.use("/api/v1/courses", learningRouter);
+app.use("/api/v1/lessons", publicLessonRouter);
+app.use("/api/v1/admin", adminLearningRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
