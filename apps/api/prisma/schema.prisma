@@ -37,6 +37,20 @@ enum CourseDifficulty {
   ADVANCED
 }
 
+enum ContentBlockType {
+  TEXT
+  HEADING
+  IMAGE
+  AUDIO
+  VIDEO
+  DIALOGUE
+  EXAMPLE
+  NOTE
+  VOCABULARY
+  DOCUMENT
+  QUIZ
+}
+
 model User {
   id              String        @id @default(uuid()) @db.Uuid
   firstName       String        @map("first_name") @db.VarChar(100)
@@ -225,7 +239,8 @@ model Lesson {
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  unit CourseUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  unit   CourseUnit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  blocks LessonContentBlock[]
 
   @@unique([unitId, slug])
   @@index([unitId])
@@ -233,4 +248,25 @@ model Lesson {
   @@index([position])
   @@index([deletedAt])
   @@map("lessons")
+}
+
+model LessonContentBlock {
+  id        String           @id @default(uuid()) @db.Uuid
+  lessonId  String           @map("lesson_id") @db.Uuid
+  type      ContentBlockType
+  title     String?          @db.VarChar(200)
+  content   Json
+  position  Int              @default(0)
+  isVisible Boolean          @default(true) @map("is_visible")
+  deletedAt DateTime?        @map("deleted_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+  @@index([type])
+  @@index([position])
+  @@index([deletedAt])
+  @@map("lesson_content_blocks")
 }

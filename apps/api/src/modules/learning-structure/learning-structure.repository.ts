@@ -950,6 +950,26 @@ export const learningStructureRepository = {
         position: true,
         status: true,
 
+        blocks: {
+          where: {
+            deletedAt: null,
+            isVisible: true,
+          },
+
+          orderBy: {
+            position: "asc",
+          },
+
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            content: true,
+            position: true,
+            isVisible: true,
+          },
+        },
+
         unit: {
           select: {
             id: true,
