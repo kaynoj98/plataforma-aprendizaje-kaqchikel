@@ -26,7 +26,14 @@ import {
   updateLesson,
   updateLevel,
   updateUnit,
+  archiveLevel,
+  archiveUnit,
+  publishLevel,
+  publishUnit,
+  unpublishLevel,
+  unpublishUnit,
 } from "./learning-structure.controller.js";
+
 import {
   courseIdParamsSchema,
   createLessonSchema,
@@ -94,6 +101,30 @@ adminLearningRouter.delete(
   deleteLevel,
 );
 
+adminLearningRouter.post(
+  "/levels/:levelId/publish",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(levelIdParamsSchema),
+  publishLevel,
+);
+
+adminLearningRouter.post(
+  "/levels/:levelId/unpublish",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(levelIdParamsSchema),
+  unpublishLevel,
+);
+
+adminLearningRouter.post(
+  "/levels/:levelId/archive",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(levelIdParamsSchema),
+  archiveLevel,
+);
+
 adminLearningRouter.get(
   "/levels/:levelId/units",
   authenticate,
@@ -127,6 +158,30 @@ adminLearningRouter.delete(
   authorize(Role.ADMIN),
   validateParams(unitIdParamsSchema),
   deleteUnit,
+);
+
+adminLearningRouter.post(
+  "/units/:unitId/publish",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(unitIdParamsSchema),
+  publishUnit,
+);
+
+adminLearningRouter.post(
+  "/units/:unitId/unpublish",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(unitIdParamsSchema),
+  unpublishUnit,
+);
+
+adminLearningRouter.post(
+  "/units/:unitId/archive",
+  authenticate,
+  authorize(Role.ADMIN),
+  validateParams(unitIdParamsSchema),
+  archiveUnit,
 );
 
 adminLearningRouter.get(

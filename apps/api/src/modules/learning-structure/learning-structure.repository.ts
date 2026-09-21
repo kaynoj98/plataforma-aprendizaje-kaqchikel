@@ -228,6 +228,70 @@ export const learningStructureRepository = {
     });
   },
 
+  updateLevelStatus(data: {
+    levelId: string;
+    actorUserId: string;
+    status: PublishStatus;
+  }) {
+    return prisma.$transaction(async (transaction) => {
+      const current = await transaction.courseLevel.findFirst({
+        where: {
+          id: data.levelId,
+          deletedAt: null,
+        },
+        select: levelSelect,
+      });
+
+      if (!current) {
+        return null;
+      }
+
+      const now = new Date();
+
+      const updated = await transaction.courseLevel.update({
+        where: {
+          id: data.levelId,
+        },
+
+        data: {
+          status: data.status,
+          publishedAt:
+            data.status === PublishStatus.PUBLISHED
+              ? (current.publishedAt ?? now)
+              : current.publishedAt,
+        },
+
+        select: levelSelect,
+      });
+
+      const action =
+        data.status === PublishStatus.PUBLISHED
+          ? "COURSE_LEVEL_PUBLISHED"
+          : data.status === PublishStatus.ARCHIVED
+            ? "COURSE_LEVEL_ARCHIVED"
+            : "COURSE_LEVEL_UNPUBLISHED";
+
+      await transaction.auditLog.create({
+        data: {
+          actorUserId: data.actorUserId,
+          action,
+          entityType: "CourseLevel",
+          entityId: data.levelId,
+          oldValues: {
+            status: current.status,
+            publishedAt: current.publishedAt,
+          },
+          newValues: {
+            status: updated.status,
+            publishedAt: updated.publishedAt,
+          },
+        },
+      });
+
+      return updated;
+    });
+  },
+
   softDeleteLevel(data: { levelId: string; actorUserId: string }) {
     return prisma.$transaction(async (transaction) => {
       const current = await transaction.courseLevel.findFirst({
@@ -393,6 +457,70 @@ export const learningStructureRepository = {
             title: updated.title,
             description: updated.description,
             position: updated.position,
+          },
+        },
+      });
+
+      return updated;
+    });
+  },
+
+  updateUnitStatus(data: {
+    unitId: string;
+    actorUserId: string;
+    status: PublishStatus;
+  }) {
+    return prisma.$transaction(async (transaction) => {
+      const current = await transaction.courseUnit.findFirst({
+        where: {
+          id: data.unitId,
+          deletedAt: null,
+        },
+        select: unitSelect,
+      });
+
+      if (!current) {
+        return null;
+      }
+
+      const now = new Date();
+
+      const updated = await transaction.courseUnit.update({
+        where: {
+          id: data.unitId,
+        },
+
+        data: {
+          status: data.status,
+          publishedAt:
+            data.status === PublishStatus.PUBLISHED
+              ? (current.publishedAt ?? now)
+              : current.publishedAt,
+        },
+
+        select: unitSelect,
+      });
+
+      const action =
+        data.status === PublishStatus.PUBLISHED
+          ? "COURSE_UNIT_PUBLISHED"
+          : data.status === PublishStatus.ARCHIVED
+            ? "COURSE_UNIT_ARCHIVED"
+            : "COURSE_UNIT_UNPUBLISHED";
+
+      await transaction.auditLog.create({
+        data: {
+          actorUserId: data.actorUserId,
+          action,
+          entityType: "CourseUnit",
+          entityId: data.unitId,
+          oldValues: {
+            status: current.status,
+            publishedAt: current.publishedAt,
+          },
+          newValues: {
+            status: updated.status,
+            publishedAt: updated.publishedAt,
           },
         },
       });

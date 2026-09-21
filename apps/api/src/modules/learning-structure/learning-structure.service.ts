@@ -93,6 +93,48 @@ export const learningStructureService = {
     return level;
   },
 
+  async publishLevel(actorUserId: string, levelId: string) {
+    const level = await learningStructureRepository.updateLevelStatus({
+      actorUserId,
+      levelId,
+      status: PublishStatus.PUBLISHED,
+    });
+
+    if (!level) {
+      throw new AppError(404, "LEVEL_NOT_FOUND", "El nivel no existe.");
+    }
+
+    return level;
+  },
+
+  async unpublishLevel(actorUserId: string, levelId: string) {
+    const level = await learningStructureRepository.updateLevelStatus({
+      actorUserId,
+      levelId,
+      status: PublishStatus.DRAFT,
+    });
+
+    if (!level) {
+      throw new AppError(404, "LEVEL_NOT_FOUND", "El nivel no existe.");
+    }
+
+    return level;
+  },
+
+  async archiveLevel(actorUserId: string, levelId: string) {
+    const level = await learningStructureRepository.updateLevelStatus({
+      actorUserId,
+      levelId,
+      status: PublishStatus.ARCHIVED,
+    });
+
+    if (!level) {
+      throw new AppError(404, "LEVEL_NOT_FOUND", "El nivel no existe.");
+    }
+
+    return level;
+  },
+
   async deleteLevel(actorUserId: string, levelId: string) {
     const level = await learningStructureRepository.softDeleteLevel({
       actorUserId,
@@ -143,6 +185,48 @@ export const learningStructureService = {
       actorUserId,
       unitId,
       input,
+    });
+
+    if (!unit) {
+      throw new AppError(404, "UNIT_NOT_FOUND", "La unidad no existe.");
+    }
+
+    return unit;
+  },
+
+  async publishUnit(actorUserId: string, unitId: string) {
+    const unit = await learningStructureRepository.updateUnitStatus({
+      actorUserId,
+      unitId,
+      status: PublishStatus.PUBLISHED,
+    });
+
+    if (!unit) {
+      throw new AppError(404, "UNIT_NOT_FOUND", "La unidad no existe.");
+    }
+
+    return unit;
+  },
+
+  async unpublishUnit(actorUserId: string, unitId: string) {
+    const unit = await learningStructureRepository.updateUnitStatus({
+      actorUserId,
+      unitId,
+      status: PublishStatus.DRAFT,
+    });
+
+    if (!unit) {
+      throw new AppError(404, "UNIT_NOT_FOUND", "La unidad no existe.");
+    }
+
+    return unit;
+  },
+
+  async archiveUnit(actorUserId: string, unitId: string) {
+    const unit = await learningStructureRepository.updateUnitStatus({
+      actorUserId,
+      unitId,
+      status: PublishStatus.ARCHIVED,
     });
 
     if (!unit) {

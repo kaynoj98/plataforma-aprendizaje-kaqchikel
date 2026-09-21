@@ -130,6 +130,60 @@ export const deleteLevel: RequestHandler = async (request, response) => {
   });
 };
 
+export const publishLevel: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as LevelIdParams;
+
+  const level = await learningStructureService.publishLevel(
+    actorUserId,
+    params.levelId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      level,
+    },
+    message: "El nivel fue publicado correctamente.",
+  });
+};
+
+export const unpublishLevel: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as LevelIdParams;
+
+  const level = await learningStructureService.unpublishLevel(
+    actorUserId,
+    params.levelId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      level,
+    },
+    message: "El nivel fue despublicado correctamente.",
+  });
+};
+
+export const archiveLevel: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as LevelIdParams;
+
+  const level = await learningStructureService.archiveLevel(
+    actorUserId,
+    params.levelId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      level,
+    },
+    message: "El nivel fue archivado correctamente.",
+  });
+};
+
 export const listUnits: RequestHandler = async (request, response) => {
   const params = request.validatedParams as LevelIdParams;
   const query = request.validatedQuery as ListChildrenQuery;
@@ -199,6 +253,60 @@ export const deleteUnit: RequestHandler = async (request, response) => {
       unit,
     },
     message: "La unidad fue eliminada correctamente.",
+  });
+};
+
+export const publishUnit: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as UnitIdParams;
+
+  const unit = await learningStructureService.publishUnit(
+    actorUserId,
+    params.unitId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      unit,
+    },
+    message: "La unidad fue publicada correctamente.",
+  });
+};
+
+export const unpublishUnit: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as UnitIdParams;
+
+  const unit = await learningStructureService.unpublishUnit(
+    actorUserId,
+    params.unitId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      unit,
+    },
+    message: "La unidad fue despublicada correctamente.",
+  });
+};
+
+export const archiveUnit: RequestHandler = async (request, response) => {
+  const actorUserId = requireAuthUserId(request);
+  const params = request.validatedParams as UnitIdParams;
+
+  const unit = await learningStructureService.archiveUnit(
+    actorUserId,
+    params.unitId,
+  );
+
+  response.status(200).json({
+    success: true,
+    data: {
+      unit,
+    },
+    message: "La unidad fue archivada correctamente.",
   });
 };
 
