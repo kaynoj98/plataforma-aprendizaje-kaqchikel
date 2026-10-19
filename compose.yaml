@@ -27,9 +27,42 @@ services:
     networks:
       - data_net
 
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: kaqchikel-garage
+    restart: unless-stopped
+
+    command:
+      - /garage
+      - server
+      - --single-node
+      - --default-bucket
+
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: ${GARAGE_DEFAULT_ACCESS_KEY}
+      GARAGE_DEFAULT_SECRET_KEY: ${GARAGE_DEFAULT_SECRET_KEY}
+      GARAGE_DEFAULT_BUCKET: ${GARAGE_DEFAULT_BUCKET}
+
+    ports:
+      - "127.0.0.1:3900:3900"
+
+    volumes:
+      - ./infrastructure/garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+
+    networks:
+      - data_net
+
 volumes:
   postgres_data:
     name: kaqchikel_postgres_data
+
+  garage_meta:
+    name: kaqchikel_garage_meta
+
+  garage_data:
+    name: kaqchikel_garage_data
 
 networks:
   data_net:

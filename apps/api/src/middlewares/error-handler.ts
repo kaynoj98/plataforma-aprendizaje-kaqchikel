@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from "express";
+import multer from "multer";
 
 import { AppError } from "../errors/app-error.js";
 
@@ -8,6 +9,34 @@ export const errorHandler: ErrorRequestHandler = (
   response,
   _next,
 ) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      response.status(413).json({
+        success: false,
+
+        error: {
+          code: "FILE_TOO_LARGE",
+
+          message: "El archivo supera el tamaño máximo permitido.",
+        },
+      });
+
+      return;
+    }
+
+    response.status(400).json({
+      success: false,
+
+      error: {
+        code: "UPLOAD_ERROR",
+
+        message: "No fue posible procesar el archivo enviado.",
+      },
+    });
+
+    return;
+  }
+
   if (error instanceof AppError) {
     response.status(error.statusCode).json({
       success: false,

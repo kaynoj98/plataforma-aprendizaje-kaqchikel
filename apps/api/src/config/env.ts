@@ -9,9 +9,9 @@ const envSchema = z
 
     PORT: z.coerce.number().int().positive().default(4000),
 
-    WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
+    WEB_ORIGIN: z.url().default("http://localhost:3000"),
 
-    APP_URL: z.string().url().default("http://localhost:3000"),
+    APP_URL: z.url().default("http://localhost:3000"),
 
     DATABASE_URL: z.string().min(1, {
       message: "DATABASE_URL es obligatoria.",
@@ -36,7 +36,7 @@ const envSchema = z
 
     SMTP_FROM_NAME: z.string().trim().min(1).default("Plataforma Kaqchikel"),
 
-    SMTP_FROM_EMAIL: z.string().trim().email().default("no-reply@example.com"),
+    SMTP_FROM_EMAIL: z.email().default("no-reply@example.com"),
 
     EMAIL_VERIFICATION_TOKEN_HOURS: z.coerce
       .number()
@@ -51,7 +51,32 @@ const envSchema = z
       .min(5)
       .max(1440)
       .default(30),
+
+    S3_ENDPOINT: z.url(),
+
+    S3_REGION: z.string().trim().min(1).default("garage"),
+
+    S3_ACCESS_KEY: z.string().trim().min(1),
+
+    S3_SECRET_KEY: z.string().min(1),
+
+    S3_BUCKET: z.string().trim().min(1),
+
+    S3_FORCE_PATH_STYLE: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
+
+    MEDIA_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(500).default(250),
+
+    MEDIA_ACCESS_URL_MINUTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(1440)
+      .default(15),
   })
+
   .superRefine((data, context) => {
     if (data.MAIL_MODE !== "smtp") {
       return;

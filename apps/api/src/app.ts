@@ -22,6 +22,7 @@ import {
 } from "./modules/learning-structure/learning-structure.routes.js";
 
 import { adminContentBlockRouter } from "./modules/content-blocks/content-block.routes.js";
+import { adminMediaRouter, mediaRouter } from "./modules/media/media.routes.js";
 
 export const app = express();
 
@@ -54,6 +55,8 @@ app.use("/api/v1/courses", learningRouter);
 app.use("/api/v1/lessons", publicLessonRouter);
 app.use("/api/v1/admin", adminLearningRouter);
 app.use("/api/v1/admin", adminContentBlockRouter);
+app.use("/api/v1/media", mediaRouter);
+app.use("/api/v1/admin/media", adminMediaRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

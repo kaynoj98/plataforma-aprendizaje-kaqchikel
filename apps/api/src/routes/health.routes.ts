@@ -1,12 +1,13 @@
 import { Router } from "express";
-
 import { prisma } from "../lib/prisma.js";
+import { storageService } from "../services/storage.service.js";
 
 export const healthRouter = Router();
 
 healthRouter.get("/", async (_request, response) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
+    await storageService.verify();
 
     response.status(200).json({
       success: true,
@@ -14,6 +15,7 @@ healthRouter.get("/", async (_request, response) => {
         status: "ok",
         service: "kaqchikel-api",
         database: "ok",
+        storage: "ok",
         timestamp: new Date().toISOString(),
       },
     });

@@ -51,6 +51,20 @@ enum ContentBlockType {
   QUIZ
 }
 
+enum MediaType {
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+}
+
+enum MediaStatus {
+  PROCESSING
+  AVAILABLE
+  FAILED
+  DELETED
+}
+
 model User {
   id              String        @id @default(uuid()) @db.Uuid
   firstName       String        @map("first_name") @db.VarChar(100)
@@ -67,6 +81,7 @@ model User {
   disabledAt      DateTime?     @map("disabled_at") @db.Timestamptz(3)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  uploadedMedia   MediaFile[]   @relation("MediaUploader")
 
   sessions            Session[]
   verificationTokens  EmailVerificationToken[]
@@ -269,4 +284,34 @@ model LessonContentBlock {
   @@index([position])
   @@index([deletedAt])
   @@map("lesson_content_blocks")
+}
+
+model MediaFile {
+  id           String @id @default(uuid()) @db.Uuid
+  uploadedById String @map("uploaded_by_id") @db.Uuid
+
+  originalName String @map("original_name") @db.VarChar(255)
+  objectKey    String @unique @map("object_key") @db.VarChar(500)
+  bucket       String @db.VarChar(100)
+
+  mediaType MediaType @map("media_type")
+  mimeType  String    @map("mime_type") @db.VarChar(150)
+  sizeBytes Int       @map("size_bytes")
+
+  status MediaStatus @default(PROCESSING)
+
+  metadata Json?
+
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  uploadedBy User @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([uploadedById])
+  @@index([mediaType])
+  @@index([status])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("media_files")
 }

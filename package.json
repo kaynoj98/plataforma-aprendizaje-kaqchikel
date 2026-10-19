@@ -19,6 +19,9 @@
     "db:generate": "pnpm --filter @kaqchikel/api run prisma:generate",
     "db:migrate": "pnpm --filter @kaqchikel/api run prisma:migrate",
     "db:seed": "pnpm --filter @kaqchikel/api run db:seed",
-    "db:studio": "pnpm --filter @kaqchikel/api run prisma:studio"
+    "db:studio": "pnpm --filter @kaqchikel/api run prisma:studio",
+    "services:up": "docker compose up -d postgres garage",
+    "services:stop": "docker compose stop postgres garage",
+    "services:logs": "docker compose logs -f postgres garage"
   }
 }
