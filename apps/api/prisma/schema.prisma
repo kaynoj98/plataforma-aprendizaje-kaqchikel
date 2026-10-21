@@ -7,6 +7,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ======================================================
+// ENUMS
+// ======================================================
+
 enum Role {
   ADMIN
   USER
@@ -65,29 +69,38 @@ enum MediaStatus {
   DELETED
 }
 
+// ======================================================
+// USERS
+// ======================================================
+
 model User {
-  id              String        @id @default(uuid()) @db.Uuid
-  firstName       String        @map("first_name") @db.VarChar(100)
-  lastName        String        @map("last_name") @db.VarChar(100)
-  email           String        @unique @db.VarChar(255)
-  passwordHash    String        @map("password_hash") @db.VarChar(255)
-  role            Role          @default(USER)
-  profileType     ProfileType   @default(STUDENT) @map("profile_type")
-  status          AccountStatus @default(PENDING)
-  emailVerifiedAt DateTime?     @map("email_verified_at") @db.Timestamptz(3)
-  lastLoginAt     DateTime?     @map("last_login_at") @db.Timestamptz(3)
-  blockedAt       DateTime?     @map("blocked_at") @db.Timestamptz(3)
-  blockedReason   String?       @map("blocked_reason") @db.Text
-  disabledAt      DateTime?     @map("disabled_at") @db.Timestamptz(3)
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
-  uploadedMedia   MediaFile[]   @relation("MediaUploader")
+  id           String        @id @default(uuid()) @db.Uuid
+  firstName    String        @map("first_name") @db.VarChar(100)
+  lastName     String        @map("last_name") @db.VarChar(100)
+  email        String        @unique @db.VarChar(255)
+  passwordHash String        @map("password_hash") @db.VarChar(255)
+  role         Role          @default(USER)
+  profileType  ProfileType   @default(STUDENT) @map("profile_type")
+  status       AccountStatus @default(PENDING)
+
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(3)
+  blockedAt       DateTime? @map("blocked_at") @db.Timestamptz(3)
+  blockedReason   String?   @map("blocked_reason") @db.Text
+  disabledAt      DateTime? @map("disabled_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   sessions            Session[]
   verificationTokens  EmailVerificationToken[]
   passwordResetTokens PasswordResetToken[]
-  auditLogs           AuditLog[]               @relation("AuditActor")
-  createCourses       Course[]                 @relation("CourseCreator")
+
+  auditLogs AuditLog[] @relation("AuditActor")
+
+  createCourses Course[] @relation("CourseCreator")
+
+  uploadedMedia MediaFile[] @relation("MediaUploader")
 
   @@index([role])
   @@index([profileType])
@@ -95,6 +108,10 @@ model User {
   @@index([createdAt])
   @@map("users")
 }
+
+// ======================================================
+// AUTHENTICATION
+// ======================================================
 
 model Session {
   id         String    @id @default(uuid()) @db.Uuid
@@ -145,18 +162,26 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// ======================================================
+// AUDIT
+// ======================================================
+
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  actorUserId String?  @map("actor_user_id") @db.Uuid
-  action      String   @db.VarChar(100)
-  entityType  String   @map("entity_type") @db.VarChar(100)
-  entityId    String?  @map("entity_id") @db.Uuid
-  ipAddress   String?  @map("ip_address") @db.VarChar(45)
-  userAgent   String?  @map("user_agent") @db.Text
-  oldValues   Json?    @map("old_values")
-  newValues   Json?    @map("new_values")
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id          String  @id @default(uuid()) @db.Uuid
+  actorUserId String? @map("actor_user_id") @db.Uuid
+
+  action     String  @db.VarChar(100)
+  entityType String  @map("entity_type") @db.VarChar(100)
+  entityId   String? @map("entity_id") @db.Uuid
+
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+  userAgent String? @map("user_agent") @db.Text
+
+  oldValues Json? @map("old_values")
+  newValues Json? @map("new_values")
+  metadata  Json?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
@@ -168,24 +193,36 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model Course {
-  id              String           @id @default(uuid()) @db.Uuid
-  title           String           @db.VarChar(200)
-  slug            String           @unique @db.VarChar(220)
-  description     String           @db.Text
-  objectives      String?          @db.Text
-  difficulty      CourseDifficulty @default(BEGINNER)
-  status          PublishStatus    @default(DRAFT)
-  position        Int              @default(0)
-  isPublicPreview Boolean          @default(false) @map("is_public_preview")
-  createdById     String           @map("created_by_id") @db.Uuid
-  publishedAt     DateTime?        @map("published_at") @db.Timestamptz(3)
-  deletedAt       DateTime?        @map("deleted_at") @db.Timestamptz(3)
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+// ======================================================
+// COURSES
+// ======================================================
 
-  createdBy User          @relation("CourseCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  levels    CourseLevel[]
+model Course {
+  id          String @id @default(uuid()) @db.Uuid
+  title       String @db.VarChar(200)
+  slug        String @unique @db.VarChar(220)
+  description String @db.Text
+
+  objectives String? @db.Text
+
+  difficulty CourseDifficulty @default(BEGINNER)
+  status     PublishStatus    @default(DRAFT)
+
+  position Int @default(0)
+
+  isPublicPreview Boolean @default(false) @map("is_public_preview")
+
+  createdById String @map("created_by_id") @db.Uuid
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy User @relation("CourseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  levels CourseLevel[]
 
   @@index([status])
   @@index([difficulty])
@@ -196,20 +233,30 @@ model Course {
   @@map("courses")
 }
 
-model CourseLevel {
-  id          String        @id @default(uuid()) @db.Uuid
-  courseId    String        @map("course_id") @db.Uuid
-  title       String        @db.VarChar(200)
-  description String?       @db.Text
-  position    Int           @default(0)
-  status      PublishStatus @default(DRAFT)
-  publishedAt DateTime?     @map("published_at") @db.Timestamptz(3)
-  deletedAt   DateTime?     @map("deleted_at") @db.Timestamptz(3)
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+// ======================================================
+// COURSE LEVELS
+// ======================================================
 
-  course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  units  CourseUnit[]
+model CourseLevel {
+  id       String @id @default(uuid()) @db.Uuid
+  courseId String @map("course_id") @db.Uuid
+
+  title       String  @db.VarChar(200)
+  description String? @db.Text
+
+  position Int @default(0)
+
+  status PublishStatus @default(DRAFT)
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  units CourseUnit[]
 
   @@index([courseId])
   @@index([status])
@@ -218,19 +265,29 @@ model CourseLevel {
   @@map("course_levels")
 }
 
-model CourseUnit {
-  id          String        @id @default(uuid()) @db.Uuid
-  levelId     String        @map("level_id") @db.Uuid
-  title       String        @db.VarChar(200)
-  description String?       @db.Text
-  position    Int           @default(0)
-  status      PublishStatus @default(DRAFT)
-  publishedAt DateTime?     @map("published_at") @db.Timestamptz(3)
-  deletedAt   DateTime?     @map("deleted_at") @db.Timestamptz(3)
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+// ======================================================
+// COURSE UNITS
+// ======================================================
 
-  level   CourseLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+model CourseUnit {
+  id      String @id @default(uuid()) @db.Uuid
+  levelId String @map("level_id") @db.Uuid
+
+  title       String  @db.VarChar(200)
+  description String? @db.Text
+
+  position Int @default(0)
+
+  status PublishStatus @default(DRAFT)
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  level CourseLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
   lessons Lesson[]
 
   @@index([levelId])
@@ -240,22 +297,36 @@ model CourseUnit {
   @@map("course_units")
 }
 
-model Lesson {
-  id               String        @id @default(uuid()) @db.Uuid
-  unitId           String        @map("unit_id") @db.Uuid
-  title            String        @db.VarChar(200)
-  slug             String        @db.VarChar(220)
-  description      String?       @db.Text
-  estimatedMinutes Int           @default(10) @map("estimated_minutes")
-  position         Int           @default(0)
-  status           PublishStatus @default(DRAFT)
-  publishedAt      DateTime?     @map("published_at") @db.Timestamptz(3)
-  deletedAt        DateTime?     @map("deleted_at") @db.Timestamptz(3)
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+// ======================================================
+// LESSONS
+// ======================================================
 
-  unit   CourseUnit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+model Lesson {
+  id     String @id @default(uuid()) @db.Uuid
+  unitId String @map("unit_id") @db.Uuid
+
+  title String @db.VarChar(200)
+  slug  String @db.VarChar(220)
+
+  description String? @db.Text
+
+  estimatedMinutes Int @default(10) @map("estimated_minutes")
+
+  position Int @default(0)
+
+  status PublishStatus @default(DRAFT)
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  unit CourseUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   blocks LessonContentBlock[]
+
+  vocabularyItems LessonVocabulary[]
 
   @@unique([unitId, slug])
   @@index([unitId])
@@ -265,17 +336,27 @@ model Lesson {
   @@map("lessons")
 }
 
+// ======================================================
+// LESSON CONTENT BLOCKS
+// ======================================================
+
 model LessonContentBlock {
-  id        String           @id @default(uuid()) @db.Uuid
-  lessonId  String           @map("lesson_id") @db.Uuid
-  type      ContentBlockType
-  title     String?          @db.VarChar(200)
-  content   Json
-  position  Int              @default(0)
-  isVisible Boolean          @default(true) @map("is_visible")
-  deletedAt DateTime?        @map("deleted_at") @db.Timestamptz(3)
-  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id       String @id @default(uuid()) @db.Uuid
+  lessonId String @map("lesson_id") @db.Uuid
+
+  type ContentBlockType
+
+  title   String? @db.VarChar(200)
+  content Json
+
+  position Int @default(0)
+
+  isVisible Boolean @default(true) @map("is_visible")
+
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
@@ -285,6 +366,10 @@ model LessonContentBlock {
   @@index([deletedAt])
   @@map("lesson_content_blocks")
 }
+
+// ======================================================
+// MEDIA
+// ======================================================
 
 model MediaFile {
   id           String @id @default(uuid()) @db.Uuid
@@ -303,10 +388,14 @@ model MediaFile {
   metadata Json?
 
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   uploadedBy User @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  vocabularyPronunciations VocabularyItem[] @relation("VocabularyPronunciationMedia")
+  vocabularyImages         VocabularyItem[] @relation("VocabularyImageMedia")
 
   @@index([uploadedById])
   @@index([mediaType])
@@ -314,4 +403,129 @@ model MediaFile {
   @@index([createdAt])
   @@index([deletedAt])
   @@map("media_files")
+}
+
+// ======================================================
+// VOCABULARY CATEGORIES
+// ======================================================
+
+model VocabularyCategory {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String @db.VarChar(150)
+
+  slug String @unique @db.VarChar(180)
+
+  description String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vocabularyItems VocabularyItem[]
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("vocabulary_categories")
+}
+
+// ======================================================
+// KAQCHIKEL VARIANTS
+// ======================================================
+
+model VocabularyVariant {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String @db.VarChar(150)
+
+  code String @unique @db.VarChar(50)
+
+  description String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vocabularyItems VocabularyItem[]
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("vocabulary_variants")
+}
+
+// ======================================================
+// VOCABULARY ITEMS
+// ======================================================
+
+model VocabularyItem {
+  id String @id @default(uuid()) @db.Uuid
+
+  term String @db.VarChar(200)
+
+  translation String @db.VarChar(255)
+
+  meaning String? @db.Text
+
+  exampleKaqchikel String? @map("example_kaqchikel") @db.Text
+  exampleSpanish   String? @map("example_spanish") @db.Text
+
+  notes String? @db.Text
+
+  categoryId String? @map("category_id") @db.Uuid
+  variantId  String? @map("variant_id") @db.Uuid
+
+  pronunciationMediaId String? @map("pronunciation_media_id") @db.Uuid
+  imageMediaId         String? @map("image_media_id") @db.Uuid
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category VocabularyCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  variant VocabularyVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  pronunciationMedia MediaFile? @relation("VocabularyPronunciationMedia", fields: [pronunciationMediaId], references: [id], onDelete: SetNull)
+
+  imageMedia MediaFile? @relation("VocabularyImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
+
+  lessonLinks LessonVocabulary[]
+
+  @@index([term])
+  @@index([translation])
+  @@index([categoryId])
+  @@index([variantId])
+  @@index([pronunciationMediaId])
+  @@index([imageMediaId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("vocabulary_items")
+}
+
+// ======================================================
+// LESSON ↔ VOCABULARY
+// ======================================================
+
+model LessonVocabulary {
+  id String @id @default(uuid()) @db.Uuid
+
+  lessonId     String @map("lesson_id") @db.Uuid
+  vocabularyId String @map("vocabulary_id") @db.Uuid
+
+  position Int @default(0)
+
+  isVisible Boolean @default(true) @map("is_visible")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  vocabulary VocabularyItem @relation(fields: [vocabularyId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, vocabularyId])
+  @@index([lessonId])
+  @@index([vocabularyId])
+  @@index([position])
+  @@index([isVisible])
+  @@map("lesson_vocabulary")
 }
