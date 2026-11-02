@@ -157,7 +157,14 @@ export const mediaService = {
     );
 
     return {
-      media,
+      media: {
+        id: media.id,
+        originalName: media.originalName,
+        mediaType: media.mediaType,
+        mimeType: media.mimeType,
+        sizeBytes: media.sizeBytes,
+        status: media.status,
+      },
       url,
 
       expiresInMinutes: env.MEDIA_ACCESS_URL_MINUTES,

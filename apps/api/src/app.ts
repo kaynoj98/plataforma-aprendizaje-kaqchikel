@@ -24,6 +24,11 @@ import {
 import { adminContentBlockRouter } from "./modules/content-blocks/content-block.routes.js";
 import { adminMediaRouter, mediaRouter } from "./modules/media/media.routes.js";
 
+import {
+  adminVocabularyRouter, publicVocabularyRouter,
+  adminLessonVocabularyRouter, lessonVocabularyRouter,
+} from "./modules/vocabulary/vocabulary.routes.js";
+
 export const app = express();
 
 app.disable("x-powered-by");
@@ -57,6 +62,11 @@ app.use("/api/v1/admin", adminLearningRouter);
 app.use("/api/v1/admin", adminContentBlockRouter);
 app.use("/api/v1/media", mediaRouter);
 app.use("/api/v1/admin/media", adminMediaRouter);
+
+app.use("/api/v1/admin/vocabulary", adminVocabularyRouter);
+app.use("/api/v1/vocabulary", publicVocabularyRouter);
+app.use("/api/v1/admin/lessons", adminLessonVocabularyRouter);
+app.use("/api/v1/lessons", lessonVocabularyRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
