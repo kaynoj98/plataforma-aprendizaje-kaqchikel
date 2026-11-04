@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Languages } from "lucide-react";
 import Link from "next/link";
-
 import { requireAdmin } from "@/lib/auth";
-
 import { VocabularyStatusButton } from "@/components/vocabulary/vocabulary-status-button";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Administrar vocabulario",
@@ -135,10 +135,19 @@ export default async function VocabularyPage() {
                     </td>
 
                     <td className="p-4">
-                      <VocabularyStatusButton
-                        vocabularyId={item.id}
-                        isActive={item.isActive}
-                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button asChild variant="outline" size="sm">
+                          <Link href={`/admin/vocabulario/${item.id}/editar`}>
+                            <Pencil className="size-4" />
+                            Editar
+                          </Link>
+                        </Button>
+
+                        <VocabularyStatusButton
+                          vocabularyId={item.id}
+                          isActive={item.isActive}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
