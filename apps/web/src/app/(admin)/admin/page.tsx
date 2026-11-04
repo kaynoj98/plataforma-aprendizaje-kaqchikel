@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
+import { cookies } from "next/headers";
 
 import { Users, GraduationCap, Languages, Files } from "lucide-react";
 
@@ -14,8 +15,54 @@ const stats = [
   { title: "Multimedia", icon: Files },
 ];
 
+type VocabularyResponse = {
+  success: boolean;
+  data?: {
+    pagination?: {
+      total: number;
+    };
+  };
+};
+
+async function getVocabularyCount(): Promise<number | null> {
+  const cookieStore = await cookies();
+  const session = cookieStore.get("kaqchikel_session");
+
+  if (!session) {
+    return null;
+  }
+
+  const apiUrl = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:4000";
+
+  try {
+    const response = await fetch(
+      `${apiUrl}/api/v1/admin/vocabulary?page=1&pageSize=1`,
+      {
+        method: "GET",
+        headers: {
+          Cookie: `kaqchikel_session=${session.value}`,
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = (await response.json()) as VocabularyResponse;
+
+    const total = result.data?.pagination?.total;
+
+    return result.success && typeof total === "number" ? total : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function AdminPage() {
   const user = await requireAdmin();
+  const vocabularyTotal = await getVocabularyCount();
   return (
     <div className="space-y-8">
       <div>
@@ -42,9 +89,16 @@ export default async function AdminPage() {
                 <Icon className="size-5 text-muted-foreground" />
               </div>
 
-              <p className="mt-4 text-3xl font-semibold">—</p>
+              <p className="mt-4 text-3xl font-semibold">
+                {stat.title === "Vocabulario" ? (vocabularyTotal ?? "—") : "—"}
+              </p>
+
               <p className="mt-2 text-xs text-muted-foreground">
-                Pendiente de conectar
+                {stat.title === "Vocabulario"
+                  ? vocabularyTotal === null
+                    ? "No se pudo consultar la API"
+                    : "Total de palabras registradas"
+                  : "Pendiente de conectar"}
               </p>
             </div>
           );

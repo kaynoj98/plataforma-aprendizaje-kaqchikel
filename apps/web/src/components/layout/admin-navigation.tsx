@@ -47,7 +47,7 @@ const navigation = [
     name: "Vocabulario",
     href: "/admin/vocabulario",
     icon: Languages,
-    enabled: false,
+    enabled: true,
   },
   {
     name: "Pronunciación",
