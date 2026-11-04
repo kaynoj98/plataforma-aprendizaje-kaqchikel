@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { LogoutButton } from "@/components/layout/logout-button";
+import { requireStudent } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Aprender Kaqchikel",
 };
 
-export default function AprenderPage() {
+export default async function AprenderPage() {
+  const user = await requireStudent();
   return (
     <main className="min-h-screen bg-muted/30 p-6">
       <div className="mx-auto max-w-5xl space-y-4 py-10">
@@ -15,7 +17,8 @@ export default function AprenderPage() {
           <LogoutButton />
         </div>
         <p className="text-muted-foreground">
-          Bienvenido a la plataforma de aprendizaje del idioma Maya Kaqchikel.
+          ¡Bienvenido, {user.firstName} {user.lastName}! Continúa aprendiendo el
+          idioma Maya Kaqchikel.
         </p>
 
         <section className="rounded-xl border bg-card p-6 shadow-sm">
