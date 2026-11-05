@@ -4,8 +4,15 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { Loader2, Save } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
+import type { CatalogOption } from "@/lib/vocabulary-catalogs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type ApiResponse = {
   success: boolean;
@@ -17,17 +24,25 @@ type ApiResponse = {
 
 type VocabularyFormProps = {
   vocabularyId?: string;
+
   initialValues?: {
     termKaqchikel: string;
     translationEs: string;
     description: string | null;
     phoneticGuide: string | null;
+    categoryId: string | null;
+    variantId: string | null;
   };
+
+  categories?: CatalogOption[];
+  variants?: CatalogOption[];
 };
 
 export function VocabularyForm({
   vocabularyId,
   initialValues,
+  categories = [],
+  variants = [],
 }: VocabularyFormProps) {
   const isEditing = Boolean(vocabularyId);
 
@@ -50,6 +65,14 @@ export function VocabularyForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [categoryId, setCategoryId] = useState(
+    initialValues?.categoryId ?? "none",
+  );
+
+  const [variantId, setVariantId] = useState(
+    initialValues?.variantId ?? "none",
+  );
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -65,7 +88,10 @@ export function VocabularyForm({
         description: description.trim() || null,
         phoneticGuide: phoneticGuide.trim() || null,
 
-        // Solamente las palabras nuevas se crean inactivas
+        categoryId: categoryId === "none" ? null : categoryId,
+
+        variantId: variantId === "none" ? null : variantId,
+
         ...(!isEditing ? { isActive: false } : {}),
       };
 
@@ -138,6 +164,56 @@ export function VocabularyForm({
           placeholder="Escribe su significado en español"
           className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Categoría */}
+
+        {/* Categoría */}
+        <div className="space-y-2">
+          <label htmlFor="vocabulary-category" className="text-sm font-medium">
+            Categoría
+          </label>
+
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger id="vocabulary-category" className="w-full">
+              <SelectValue placeholder="Seleccionar categoría" />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="none">Sin categoría</SelectItem>
+
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Variante regional */}
+        <div className="space-y-2">
+          <label htmlFor="vocabulary-variant" className="text-sm font-medium">
+            Variante regional
+          </label>
+
+          <Select value={variantId} onValueChange={setVariantId}>
+            <SelectTrigger id="vocabulary-variant" className="w-full">
+              <SelectValue placeholder="Seleccionar variante" />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="none">Sin variante</SelectItem>
+
+              {variants.map((variant) => (
+                <SelectItem key={variant.id} value={variant.id}>
+                  {variant.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="space-y-2">

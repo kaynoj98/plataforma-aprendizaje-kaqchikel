@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
 import { VocabularyForm } from "@/components/vocabulary/vocabulary-form";
+import { getActiveVocabularyCatalog } from "@/lib/vocabulary-catalogs";
 
 export const metadata: Metadata = {
   title: "Editar vocabulario",
@@ -15,6 +16,18 @@ type VocabularyItem = {
   translationEs: string;
   description: string | null;
   phoneticGuide: string | null;
+
+  category: {
+    id: string;
+    name: string;
+    isActive: boolean;
+  } | null;
+
+  variant: {
+    id: string;
+    name: string;
+    isActive: boolean;
+  } | null;
 };
 
 type VocabularyResponse = {
@@ -100,6 +113,44 @@ export default async function EditVocabularyPage({
     );
   }
 
+  const [activeCategories, activeVariants] = await Promise.all([
+    getActiveVocabularyCatalog("categories"),
+    getActiveVocabularyCatalog("variants"),
+  ]);
+
+  if (activeCategories === null || activeVariants === null) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        No fue posible cargar las categorías y variantes.
+      </p>
+    );
+  }
+
+  const categories = [...activeCategories];
+  const variants = [...activeVariants];
+
+  // Conservar la categoría actual aunque esté inactiva
+  if (
+    vocabulary.category &&
+    !categories.some((c) => c.id === vocabulary.category?.id)
+  ) {
+    categories.push({
+      id: vocabulary.category.id,
+      name: `${vocabulary.category.name} (inactiva)`,
+    });
+  }
+
+  // Conservar la variante actual aunque esté inactiva
+  if (
+    vocabulary.variant &&
+    !variants.some((v) => v.id === vocabulary.variant?.id)
+  ) {
+    variants.push({
+      id: vocabulary.variant.id,
+      name: `${vocabulary.variant.name} (inactiva)`,
+    });
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -117,7 +168,11 @@ export default async function EditVocabularyPage({
           translationEs: vocabulary.translationEs,
           description: vocabulary.description,
           phoneticGuide: vocabulary.phoneticGuide,
+          categoryId: vocabulary.category?.id ?? null,
+          variantId: vocabulary.variant?.id ?? null,
         }}
+        categories={categories}
+        variants={variants}
       />
     </div>
   );
