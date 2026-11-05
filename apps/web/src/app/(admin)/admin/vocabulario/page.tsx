@@ -81,13 +81,18 @@ export default async function VocabularyPage() {
         </p>
       </div>
 
-      <div className="flex justify-end">
-        <Link
-          href="/admin/vocabulario/nuevo"
-          className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          + Nueva palabra
-        </Link>
+      <div className="flex flex-wrap justify-end gap-3">
+        <Button asChild variant="outline">
+          <Link href="/admin/vocabulario/categorias">Categorías</Link>
+        </Button>
+
+        <Button asChild variant="outline">
+          <Link href="/admin/vocabulario/variantes">Variantes regionales</Link>
+        </Button>
+
+        <Button asChild>
+          <Link href="/admin/vocabulario/nuevo">+ Nueva palabra</Link>
+        </Button>
       </div>
 
       <div className="rounded-xl border bg-card shadow-sm">
