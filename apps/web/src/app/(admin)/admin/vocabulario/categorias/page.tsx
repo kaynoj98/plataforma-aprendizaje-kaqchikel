@@ -33,7 +33,7 @@ type CategoriesResponse = {
   };
 };
 
-async function getCategories() {
+async function getCategories(page: number) {
   const cookieStore = await cookies();
   const session = cookieStore.get("kaqchikel_session");
 
@@ -45,7 +45,7 @@ async function getCategories() {
 
   try {
     const response = await fetch(
-      `${apiUrl}/api/v1/admin/vocabulary/categories?page=1&pageSize=20`,
+      `${apiUrl}/api/v1/admin/vocabulary/categories?page=${page}&pageSize=20`,
       {
         method: "GET",
         headers: {
@@ -71,10 +71,27 @@ async function getCategories() {
   }
 }
 
-export default async function CategoriesPage() {
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    page?: string | string[];
+  }>;
+}) {
   await requireAdmin();
 
-  const categories = await getCategories();
+  const { page: pageParam } = await searchParams;
+
+  const requestedPage = typeof pageParam === "string" ? Number(pageParam) : 1;
+
+  const currentPage =
+    Number.isInteger(requestedPage) &&
+    requestedPage >= 1 &&
+    requestedPage <= 1000000
+      ? requestedPage
+      : 1;
+
+  const categories = await getCategories(currentPage);
 
   return (
     <div className="space-y-6">
@@ -185,6 +202,51 @@ export default async function CategoriesPage() {
           </div>
         )}
       </div>
+
+      {categories && categories.pagination.totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
+          <p className="text-sm text-muted-foreground">
+            Página {categories.pagination.page} de{" "}
+            {categories.pagination.totalPages}
+            {" · "}
+            {categories.pagination.total} categorías
+          </p>
+
+          <div className="flex items-center gap-2">
+            {categories.pagination.page > 1 ? (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  href={`/admin/vocabulario/categorias?page=${
+                    categories.pagination.page - 1
+                  }`}
+                >
+                  Anterior
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Anterior
+              </Button>
+            )}
+
+            {categories.pagination.page < categories.pagination.totalPages ? (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  href={`/admin/vocabulario/categorias?page=${
+                    categories.pagination.page + 1
+                  }`}
+                >
+                  Siguiente
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Siguiente
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

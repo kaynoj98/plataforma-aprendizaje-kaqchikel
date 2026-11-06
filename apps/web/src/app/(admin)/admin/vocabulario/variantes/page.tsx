@@ -33,7 +33,7 @@ type VariantsResponse = {
   };
 };
 
-async function getVariants() {
+async function getVariants(page: number) {
   const cookieStore = await cookies();
   const session = cookieStore.get("kaqchikel_session");
 
@@ -45,7 +45,7 @@ async function getVariants() {
 
   try {
     const response = await fetch(
-      `${apiUrl}/api/v1/admin/vocabulary/variants?page=1&pageSize=20`,
+      `${apiUrl}/api/v1/admin/vocabulary/variants?page=${page}&pageSize=20`,
       {
         method: "GET",
         headers: {
@@ -71,10 +71,27 @@ async function getVariants() {
   }
 }
 
-export default async function VariantsPage() {
+export default async function VariantsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    page?: string | string[];
+  }>;
+}) {
   await requireAdmin();
 
-  const variants = await getVariants();
+  const { page: pageParam } = await searchParams;
+
+  const requestedPage = typeof pageParam === "string" ? Number(pageParam) : 1;
+
+  const currentPage =
+    Number.isInteger(requestedPage) &&
+    requestedPage >= 1 &&
+    requestedPage <= 1000000
+      ? requestedPage
+      : 1;
+
+  const variants = await getVariants(currentPage);
 
   return (
     <div className="space-y-6">
@@ -189,6 +206,51 @@ export default async function VariantsPage() {
           </div>
         )}
       </div>
+
+      {variants && variants.pagination.totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4">
+          <p className="text-sm text-muted-foreground">
+            Página {variants.pagination.page} de{" "}
+            {variants.pagination.totalPages}
+            {" · "}
+            {variants.pagination.total} variantes
+          </p>
+
+          <div className="flex items-center gap-2">
+            {variants.pagination.page > 1 ? (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  href={`/admin/vocabulario/variantes?page=${
+                    variants.pagination.page - 1
+                  }`}
+                >
+                  Anterior
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Anterior
+              </Button>
+            )}
+
+            {variants.pagination.page < variants.pagination.totalPages ? (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  href={`/admin/vocabulario/variantes?page=${
+                    variants.pagination.page + 1
+                  }`}
+                >
+                  Siguiente
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Siguiente
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
