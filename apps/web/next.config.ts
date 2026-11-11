@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Audio de hasta 30 MiB más la envoltura multipart.
+  experimental: { proxyClientMaxBodySize: "31mb" },
   async rewrites() {
     return [
       {

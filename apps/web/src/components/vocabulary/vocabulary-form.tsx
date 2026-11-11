@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MediaUpload } from "./media-upload";
 import type { CatalogOption } from "@/lib/vocabulary-catalogs";
 import {
   Select,
@@ -32,6 +33,8 @@ type VocabularyFormProps = {
     phoneticGuide: string | null;
     categoryId: string | null;
     variantId: string | null;
+    imageMediaId?: string;
+    pronunciationMediaId?: string;
   };
 
   categories?: CatalogOption[];
@@ -63,6 +66,10 @@ export function VocabularyForm({
   );
 
   const [saving, setSaving] = useState(false);
+  const [imageId, setImageId] = useState<string>();
+  const [audioId, setAudioId] = useState<string>();
+  const [imagePending, setImagePending] = useState(false);
+  const [audioPending, setAudioPending] = useState(false);
   const [error, setError] = useState("");
 
   const [categoryId, setCategoryId] = useState(
@@ -76,7 +83,7 @@ export function VocabularyForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (saving) return;
+    if (saving || imagePending || audioPending) return;
 
     setSaving(true);
     setError("");
@@ -88,9 +95,12 @@ export function VocabularyForm({
         description: description.trim() || null,
         phoneticGuide: phoneticGuide.trim() || null,
 
-        categoryId: categoryId === "none" ? null : categoryId,
-
-        variantId: variantId === "none" ? null : variantId,
+        ...(!isEditing || categoryId !== (initialValues?.categoryId ?? "none")
+          ? { categoryId: categoryId === "none" ? null : categoryId } : {}),
+        ...(!isEditing || variantId !== (initialValues?.variantId ?? "none")
+          ? { variantId: variantId === "none" ? null : variantId } : {}),
+        ...(imageId && { imageMediaId: imageId }),
+        ...(audioId && { pronunciationMediaId: audioId }),
 
         ...(!isEditing ? { isActive: false } : {}),
       };
@@ -245,6 +255,15 @@ export function VocabularyForm({
         />
       </div>
 
+      {isEditing && (
+        <section aria-label="Multimedia" className="grid gap-4 md:grid-cols-2">
+          <MediaUpload kind="image" mediaId={imageId ?? initialValues?.imageMediaId}
+            disabled={saving} onUploaded={setImageId} onPending={setImagePending} />
+          <MediaUpload kind="audio" mediaId={audioId ?? initialValues?.pronunciationMediaId}
+            disabled={saving} onUploaded={setAudioId} onPending={setAudioPending} />
+        </section>
+      )}
+
       <p className="text-xs text-muted-foreground">
         * Campos obligatorios. La palabra se guardará inicialmente como inactiva
         hasta su revisión.
@@ -264,7 +283,7 @@ export function VocabularyForm({
           <Link href="/admin/vocabulario">Cancelar</Link>
         </Button>
 
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || imagePending || audioPending}>
           {saving ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (

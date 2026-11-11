@@ -16,6 +16,8 @@ type VocabularyItem = {
   translationEs: string;
   description: string | null;
   phoneticGuide: string | null;
+  imageMedia: { id: string } | null;
+  pronunciationMedia: { id: string } | null;
 
   category: {
     id: string;
@@ -168,6 +170,8 @@ export default async function EditVocabularyPage({
           translationEs: vocabulary.translationEs,
           description: vocabulary.description,
           phoneticGuide: vocabulary.phoneticGuide,
+          imageMediaId: vocabulary.imageMedia?.id,
+          pronunciationMediaId: vocabulary.pronunciationMedia?.id,
           categoryId: vocabulary.category?.id ?? null,
           variantId: vocabulary.variant?.id ?? null,
         }}
