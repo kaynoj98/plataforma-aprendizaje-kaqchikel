@@ -29,13 +29,10 @@ export default async function AprenderPage() {
           <Button asChild><Link href="/aprender/vocabulario">Explorar vocabulario</Link></Button>
         </section>
 
-        <section className="rounded-xl border bg-card p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Mis cursos</h2>
-
-          <p className="mt-3 text-sm text-muted-foreground">
-            Aquí aparecerán los cursos y las lecciones disponibles para el
-            estudiante.
-          </p>
+        <section className="space-y-3 rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">Cursos</h2>
+          <p className="text-sm text-muted-foreground">Explora los cursos disponibles para aprender Kaqchikel.</p>
+          <Button asChild><Link href="/aprender/cursos">Ver cursos</Link></Button>
         </section>
       </div>
     </main>
