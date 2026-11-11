@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AudioLines, Check, ImagePlus, Loader2, Upload } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+
+import { httpError, Preview, StoredPreview } from "./media-preview";
 
 type Kind = "image" | "audio";
 
@@ -22,70 +25,6 @@ const formats: Record<Kind, Record<string, string[]>> = {
   },
 };
 
-function httpError(status: number) {
-  switch (status) {
-    case 400: return "El servidor rechazó el archivo o identificador.";
-    case 401: return "La sesión ha caducado. Vuelve a iniciar sesión.";
-    case 403: return "Tu cuenta no tiene permiso para esta operación.";
-    case 404: return "El archivo ya no está disponible.";
-    case 413: return "El archivo supera el tamaño permitido.";
-    default: return "El servicio multimedia no está disponible. Inténtalo de nuevo.";
-  }
-}
-
-function Preview({ kind, src, onError }: { kind: Kind; src: string; onError: () => void }) {
-  if (kind === "audio") {
-    return <audio aria-label="Audio de pronunciación" className="w-full" controls preload="metadata"
-      src={src} onError={onError} />;
-  }
-  // El recurso puede ser un blob local o una URL firmada de corta duración.
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className="max-h-52 max-w-full rounded-md object-contain"
-    alt="Imagen de vocabulario" src={src} onError={onError} />;
-}
-
-function StoredPreview({ kind, id }: { kind: Kind; id: string }) {
-  const [attempt, setAttempt] = useState(0);
-  const [link, setLink] = useState<{ url: string; expires: number }>();
-  const [error, setError] = useState("");
-  function refresh() {
-    setError("");
-    setLink(undefined);
-    setAttempt(n => n + 1);
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    async function read() {
-      try {
-        const response = await fetch(`/api/v1/media/${encodeURIComponent(id)}/access`, {
-          credentials: "same-origin", cache: "no-store", signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(httpError(response.status));
-        const result = await response.json();
-        const data = result?.data;
-        if (!result?.success || typeof data?.url !== "string" ||
-            !(data.expiresInMinutes > 0)) throw new Error("El enlace del archivo no está disponible.");
-        if (!controller.signal.aborted) {
-          setLink({ url: data.url, expires: Date.now() + data.expiresInMinutes * 60000 });
-        }
-      } catch (cause) {
-        if (!controller.signal.aborted) setError(cause instanceof TypeError
-          ? "No se pudo conectar con el servicio multimedia."
-          : cause instanceof Error ? cause.message : "El archivo no está disponible.");
-      }
-    }
-    void read();
-    return () => controller.abort();
-  }, [id, attempt]);
-  if (error) return <div className="space-y-2"><p role="alert">{error}</p>
-    <Button type="button" variant="outline" onClick={refresh}>Reintentar vista previa</Button></div>;
-  if (!link) return <p role="status">Cargando vista previa…</p>;
-  return <Preview kind={kind} src={link.url} onError={() => {
-    if (Date.now() >= link.expires - 1000) refresh();
-    else setError("No se pudo abrir el archivo multimedia.");
-  }} />;
-}
-
 export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: {
   kind: Kind;
   mediaId?: string;
@@ -100,11 +39,16 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
   const [localUrl, setLocalUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [uploadedId, setUploadedId] = useState<string>();
+  const [dragging, setDragging] = useState(false);
   const isImage = kind === "image";
   const limit = isImage ? 10 : 30;
   const allowed = formats[kind];
   const extensions = [...new Set(Object.values(allowed).flat())];
+  const Icon = isImage ? ImagePlus : AudioLines;
+  const awaitingSave = Boolean(mediaId && mediaId === uploadedId);
+  const prompt = isImage ? "Haz clic para seleccionar una imagen" : "Haz clic para seleccionar un audio";
+  const dropHint = isImage ? "O arrastra y suelta una imagen aquí" : "O arrastra y suelta un audio aquí";
   function clearSelection() {
     if (input.current) input.current.value = "";
     setFile(undefined);
@@ -115,7 +59,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
 
   function select(candidate?: File) {
     setError("");
-    setMessage("");
+
     if (!candidate) { clearSelection(); return; }
     const extension = /\.([^.]+)$/.exec(candidate.name)?.[1].toLowerCase() ?? "";
     if (!allowed[candidate.type]?.includes(extension) || candidate.size > limit * 1024 * 1024) {
@@ -149,7 +93,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
       }
       onUploaded(media.id);
       clearSelection();
-      setMessage("Archivo subido. Guarda los cambios para asociarlo a la palabra.");
+      setUploadedId(media.id);
     } catch {
       setError("No se pudo confirmar la subida. Comprueba la conexión con el servidor.");
     } finally {
@@ -158,25 +102,94 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
     }
   }
   return (
-    <fieldset disabled={disabled || busy} className="min-w-0 space-y-3 rounded-lg border p-4 text-sm">
-      <legend className="px-1 font-medium">{isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}</legend>
-      {localUrl ? <Preview kind={kind} src={localUrl} onError={() => setError("El navegador no puede mostrar la vista previa de este archivo.")} />
-        : mediaId && <StoredPreview key={mediaId} kind={kind} id={mediaId} />}
-      <label htmlFor={inputId} className="block">Seleccionar {isImage ? "imagen" : "audio"}</label>
-      <input ref={input} type="file" id={inputId} className="w-full text-sm"
-        accept={[...Object.keys(allowed), ...extensions.map(ext => "." + ext)].join(",")}
-        aria-describedby={inputId + "-formats"}
-        onChange={event => select(event.target.files?.[0])} />
-      <p id={inputId + "-formats"} className="text-xs text-muted-foreground">{extensions.join(", ")} · Hasta {limit} MiB</p>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={!file || busy} onClick={upload}>
-          {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
-          {busy ? "Subiendo…" : isImage ? "Subir imagen" : "Subir audio"}
-        </Button>
-        {file && <Button type="button" variant="ghost" onClick={() => select()}>Descartar selección</Button>}
+    <fieldset disabled={disabled || busy} className="min-w-0 space-y-3 rounded-xl border bg-card p-4 text-sm">
+      <legend className="px-1.5 font-semibold">
+        {isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}
+      </legend>
+
+      {(localUrl || mediaId) && (
+        <div className="min-w-0 space-y-2 rounded-lg bg-muted/50 p-3">
+          <p className="text-xs font-medium">
+            {file ? "Selección pendiente de subir" : awaitingSave ? "Subida pendiente de asociar"
+              : isImage ? "Imagen asociada" : "Audio asociado"}
+          </p>
+          <div className={cn("min-w-0", isImage && "grid min-h-24 place-items-center [&_img]:max-h-36")}>
+            {localUrl ? (
+              <Preview kind={kind} src={localUrl}
+                onError={() => setError("El navegador no puede mostrar la vista previa de este archivo.")} />
+            ) : mediaId && <StoredPreview key={mediaId} kind={kind} id={mediaId} showName />}
+          </div>
+          {file && <p className="break-all text-xs text-muted-foreground">{file.name}</p>}
+        </div>
+      )}
+
+      <div>
+        <input ref={input} type="file" id={inputId} className="peer sr-only"
+          accept={[...Object.keys(allowed), ...extensions.map(ext => "." + ext)].join(",")}
+          aria-describedby={inputId + "-formats"}
+          onChange={event => {
+            const candidate = event.target.files?.[0];
+            if (candidate) select(candidate);
+          }} />
+        <label htmlFor={inputId}
+          onDragOver={event => {
+            event.preventDefault();
+            const canDrop = !disabled && !lock.current && event.dataTransfer.types.includes("Files");
+            event.dataTransfer.dropEffect = canDrop ? "copy" : "none";
+            setDragging(canDrop);
+          }}
+          onDragLeave={event => {
+            if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) {
+              setDragging(false);
+            }
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            setDragging(false);
+            if (disabled || lock.current) return;
+            const files = event.dataTransfer.files;
+            if (files.length > 1) {
+              setError("Selecciona un solo archivo a la vez.");
+            } else if (files.length === 1) {
+              select(files[0]);
+            }
+          }}
+          className={cn(
+            "flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed px-3 py-3 transition-colors hover:border-primary/50 hover:bg-muted/50",
+            "peer-focus-visible:border-ring peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-disabled:cursor-default peer-disabled:opacity-60",
+            dragging && "border-primary bg-primary/10",
+          )}>
+          <Icon aria-hidden="true" className="size-6 shrink-0 text-primary" />
+          <span className="min-w-0">
+            <span className="block font-medium">{dragging ? "Suelta el archivo aquí" : mediaId || file
+              ? isImage ? "Seleccionar otra imagen" : "Seleccionar otro audio"
+              : prompt}</span>
+            <span className="block text-xs text-muted-foreground">{dropHint}</span>
+          </span>
+        </label>
+        <p id={inputId + "-formats"} className="mt-2 text-xs text-muted-foreground">
+          {extensions.join(", ").toUpperCase()} · Hasta {limit} MiB
+        </p>
       </div>
-      {error && <p role="alert" className="text-destructive">{error}</p>}
-      <p role="status">{busy ? "Subida en curso…" : message}</p>
+
+      {file && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" className="min-h-11" disabled={busy || disabled} onClick={upload}>
+            {busy ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <Upload aria-hidden="true" />}
+            {busy ? "Subiendo…" : isImage ? "Subir imagen" : "Subir audio"}
+          </Button>
+          <Button type="button" variant="ghost" className="min-h-11" onClick={() => select()}>Descartar</Button>
+        </div>
+      )}
+      {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-destructive">{error}</p>}
+      <div role="status" className="empty:hidden">
+        {busy ? "Subida en curso…" : awaitingSave && !file && (
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />
+            Archivo subido. Guarda los cambios para asociarlo a la palabra.
+          </p>
+        )}
+      </div>
     </fieldset>
   );
 }

@@ -256,7 +256,7 @@ export function VocabularyForm({
       </div>
 
       {isEditing && (
-        <section aria-label="Multimedia" className="grid gap-4 md:grid-cols-2">
+        <section aria-label="Multimedia" className="grid items-start gap-4 md:grid-cols-2">
           <MediaUpload kind="image" mediaId={imageId ?? initialValues?.imageMediaId}
             disabled={saving} onUploaded={setImageId} onPending={setImagePending} />
           <MediaUpload kind="audio" mediaId={audioId ?? initialValues?.pronunciationMediaId}
@@ -265,8 +265,10 @@ export function VocabularyForm({
       )}
 
       <p className="text-xs text-muted-foreground">
-        * Campos obligatorios. La palabra se guardará inicialmente como inactiva
-        hasta su revisión.
+        * Campos obligatorios.{" "}
+        {isEditing
+          ? "Guarda los cambios para actualizar esta palabra."
+          : "La palabra se guardará inicialmente como inactiva hasta su revisión."}
       </p>
 
       {error && (

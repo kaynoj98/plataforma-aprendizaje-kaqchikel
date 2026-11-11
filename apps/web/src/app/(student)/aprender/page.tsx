@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { requireStudent } from "@/lib/auth";
 
@@ -20,6 +22,12 @@ export default async function AprenderPage() {
           ¡Bienvenido, {user.firstName} {user.lastName}! Continúa aprendiendo el
           idioma Maya Kaqchikel.
         </p>
+
+        <section className="space-y-3 rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-xl font-semibold">Vocabulario audiovisual</h2>
+          <p className="text-sm text-muted-foreground">Consulta palabras en Kaqchikel y escucha su pronunciación.</p>
+          <Button asChild><Link href="/aprender/vocabulario">Explorar vocabulario</Link></Button>
+        </section>
 
         <section className="rounded-xl border bg-card p-6 shadow-sm">
           <h2 className="text-xl font-semibold">Mis cursos</h2>
