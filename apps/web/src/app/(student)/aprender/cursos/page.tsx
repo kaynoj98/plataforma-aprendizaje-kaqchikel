@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireStudent } from "@/lib/auth";
-import { getCourses } from "@/lib/student-courses";
+import { getCourses, getEnrollments } from "@/lib/student-courses";
+import { CourseProgress } from "@/components/courses/course-progress";
 
 export const metadata = { title: "Cursos" };
 
@@ -15,7 +16,8 @@ export default async function CoursesPage({ searchParams }: {
   if (Array.isArray(raw) || !Number.isSafeInteger(page) || page < 1 || page > 1000000) {
     redirect("/aprender/cursos");
   }
-  const { courses, totalPages } = await getCourses(page);
+  const [{ courses, totalPages }, enrollments] = await Promise.all([getCourses(page), getEnrollments()]);
+  const byCourse = new Map(enrollments.map(item => [item.courseId, item]));
   const last = Math.max(totalPages, 1);
   if (page > last) redirect(`/aprender/cursos?page=${last}`);
 
@@ -28,16 +30,20 @@ export default async function CoursesPage({ searchParams }: {
           <p role="status" className="rounded-xl border bg-card p-6">Aún no hay cursos disponibles.</p>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {courses.map(course => (
+            {courses.map(course => {
+              const progress = byCourse.get(course.id);
+              return (
               <li key={course.id} className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-5 shadow-sm">
                 <p className="text-xs font-medium text-muted-foreground">Dificultad · {course.difficulty}</p>
                 <h2 className="break-words text-xl font-semibold">{course.title}</h2>
                 <p className="line-clamp-3 break-words text-sm text-muted-foreground">{course.description}</p>
+                {progress && <CourseProgress progress={progress} />}
                 <Button asChild className="mt-auto self-start">
                   <Link href={`/aprender/cursos/${course.id}`} aria-label={`Ver curso: ${course.title}`}>Ver curso</Link>
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         {totalPages > 1 && (

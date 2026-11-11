@@ -102,6 +102,7 @@ model User {
   createCourses Course[] @relation("CourseCreator")
 
   uploadedMedia MediaFile[] @relation("MediaUploader")
+  enrollments   Enrollment[]
 
   @@index([role])
   @@index([profileType])
@@ -224,6 +225,7 @@ model Course {
   createdBy User @relation("CourseCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   levels CourseLevel[]
+  enrollments Enrollment[]
 
   @@index([status])
   @@index([difficulty])
@@ -328,6 +330,8 @@ model Lesson {
   blocks LessonContentBlock[]
 
   vocabularyItems LessonVocabulary[]
+  progress        LessonProgress[]
+
 
   @@unique([unitId, slug])
   @@index([unitId])
@@ -335,6 +339,35 @@ model Lesson {
   @@index([position])
   @@index([deletedAt])
   @@map("lessons")
+}
+
+model Enrollment {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  courseId   String   @map("course_id") @db.Uuid
+  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  progress LessonProgress[]
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id           String   @id @default(uuid()) @db.Uuid
+  enrollmentId String   @map("enrollment_id") @db.Uuid
+  lessonId     String   @map("lesson_id") @db.Uuid
+  completedAt  DateTime @default(now()) @map("completed_at") @db.Timestamptz(3)
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     Lesson     @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+
+  @@unique([enrollmentId, lessonId])
+  @@index([lessonId])
+  @@map("lesson_progress")
 }
 
 // ======================================================

@@ -7,6 +7,7 @@ import { env } from "./config/envSchema.js";
 import { errorHandler } from "./middlewares/error-handler.js";
 import { notFoundHandler } from "./middlewares/not-found.js";
 import { healthRouter } from "./routes/health.routes.js";
+import { enrollmentRouter } from "./modules/enrollments/enrollment.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { adminUserRouter, userRouter } from "./modules/users/user.routes.js";
 import {
@@ -47,6 +48,7 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
 app.use("/api/v1/health", healthRouter);
+app.use("/api/v1/enrollments", enrollmentRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/admin/users", adminUserRouter);
