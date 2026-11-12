@@ -41,8 +41,10 @@ const navigation = [
     name: "Cursos",
     href: "/admin/cursos",
     icon: GraduationCap,
-    enabled: false,
+    enabled: true,
   },
+  { name: "Contenidos académicos", href: "/admin/contenidos", icon: BookOpen, enabled: true },
+  { name: "Inscripciones y progreso", href: "/admin/inscripciones", icon: Users, enabled: true },
   {
     name: "Vocabulario",
     href: "/admin/vocabulario",

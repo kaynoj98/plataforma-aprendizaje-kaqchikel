@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { listAdminCourses } from "@/lib/admin-academics";
 import { requireAdmin } from "@/lib/auth";
 import { cookies } from "next/headers";
 
@@ -62,7 +64,9 @@ async function getVocabularyCount(): Promise<number | null> {
 
 export default async function AdminPage() {
   const user = await requireAdmin();
-  const vocabularyTotal = await getVocabularyCount();
+  const [vocabularyTotal, courses] = await Promise.all([
+    getVocabularyCount(), listAdminCourses(1, 1).catch(() => null),
+  ]);
   return (
     <div className="space-y-8">
       <div>
@@ -90,7 +94,8 @@ export default async function AdminPage() {
               </div>
 
               <p className="mt-4 text-3xl font-semibold">
-                {stat.title === "Vocabulario" ? (vocabularyTotal ?? "—") : "—"}
+                {stat.title === "Vocabulario" ? (vocabularyTotal ?? "—") :
+                  stat.title === "Cursos" ? (courses?.pagination.totalItems ?? "—") : "—"}
               </p>
 
               <p className="mt-2 text-xs text-muted-foreground">
@@ -98,7 +103,7 @@ export default async function AdminPage() {
                   ? vocabularyTotal === null
                     ? "No se pudo consultar la API"
                     : "Total de palabras registradas"
-                  : "Pendiente de conectar"}
+                  : stat.title === "Cursos" ? <Link href="/admin/cursos" className="underline">Gestionar cursos</Link> : "Pendiente de conectar"}
               </p>
             </div>
           );

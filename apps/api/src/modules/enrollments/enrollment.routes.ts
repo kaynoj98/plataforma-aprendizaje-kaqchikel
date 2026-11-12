@@ -6,7 +6,7 @@ import { authorize } from "../../middlewares/authorize.js";
 import { validateBody } from "../../middlewares/validate-body.js";
 import { validateParams } from "../../middlewares/validate-params.js";
 import { courseIdParamsSchema, lessonIdParamsSchema } from "../learning-structure/learning-structure.schemas.js";
-import { completeLesson, enroll, getProgress, listEnrollments } from "./enrollment.service.js";
+import { courseEnrollmentReport, completeLesson, enroll, getProgress, listEnrollments } from "./enrollment.service.js";
 
 export const enrollmentRouter = Router();
 enrollmentRouter.use(authenticate, authorize(Role.USER));
@@ -36,4 +36,11 @@ enrollmentRouter.put("/:courseId/lessons/:lessonId", lessonParams, emptyBody, as
   const { courseId, lessonId } = req.validatedParams as { courseId: string; lessonId: string };
   await completeLesson(req.auth!.user.id, courseId, lessonId);
   res.sendStatus(204);
+});
+
+export const adminEnrollmentRouter = Router();
+adminEnrollmentRouter.get("/courses/:courseId/enrollments", authenticate, authorize(Role.ADMIN), courseParams, async (req, res) => {
+  const { courseId } = req.validatedParams as z.infer<typeof courseIdParamsSchema>;
+  res.set("Cache-Control", "private, no-store");
+  res.json({ success: true, data: await courseEnrollmentReport(courseId) });
 });

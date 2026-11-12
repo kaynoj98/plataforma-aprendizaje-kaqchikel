@@ -21,12 +21,16 @@ const selection = {
 function summarize(enrollment: Prisma.EnrollmentGetPayload<{ select: typeof selection }>) {
   const { course, progress } = enrollment;
   const lessons = course.levels.flatMap(level => level.units.flatMap(unit => unit.lessons));
-  const recorded = new Set(progress.map(mark => mark.lessonId));
+  return { courseId: course.id, title: course.title, ...lessonTotals(lessons, progress) };
+}
+
+function lessonTotals(lessons: { id: string }[], marks: { lessonId: string }[]) {
+  const recorded = new Set(marks.map(mark => mark.lessonId));
   const completedLessonIds = lessons.filter(lesson => recorded.has(lesson.id)).map(lesson => lesson.id);
   const total = lessons.length;
   const completed = completedLessonIds.length;
   return {
-    courseId: course.id, title: course.title, completed, total,
+    completed, total,
     percentage: total ? Math.floor(100 * completed / total) : 0,
     nextLessonId: lessons.find(lesson => !recorded.has(lesson.id))?.id ?? null,
     completedLessonIds,
@@ -88,4 +92,43 @@ export async function completeLesson(userId: string, courseId: string, lessonId:
     SELECT EXISTS(SELECT FROM available) AS available, EXISTS(SELECT FROM mine) AS enrolled`;
   if (!result?.available) throw new AppError(404, "LESSON_NOT_FOUND", "La lección no está disponible en este curso.");
   if (!result.enrolled) throw new AppError(403, "ENROLLMENT_REQUIRED", "Inscríbete al curso antes de completar la lección.");
+}
+
+export async function courseEnrollmentReport(courseId: string) {
+  const course = await prisma.course.findFirst({
+    where: { id: courseId, deletedAt: null },
+    select: {
+      ...courseSelection, status: true,
+      enrollments: {
+        orderBy: [{ enrolledAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true, enrolledAt: true,
+          user: { select: { firstName: true, lastName: true, email: true } },
+          progress: {
+            orderBy: [{ completedAt: "asc" }, { id: "asc" }],
+            select: { lessonId: true, lesson: { select: { title: true } }, completedAt: true },
+          },
+        },
+      },
+    },
+  });
+  if (!course) throw new AppError(404, "COURSE_NOT_FOUND", "El curso no está disponible.");
+  const lessons = course.status === "PUBLISHED"
+    ? course.levels.flatMap(level => level.units.flatMap(unit => unit.lessons)) : [];
+  const students = course.enrollments.map(row => {
+    const totals = lessonTotals(lessons, row.progress);
+    const available = new Set(totals.completedLessonIds);
+    return {
+      enrollmentId: row.id, student: row.user, enrolledAt: row.enrolledAt,
+      completed: totals.completed, percentage: totals.percentage,
+      lessons: row.progress.map(mark => ({
+        title: mark.lesson.title, completedAt: mark.completedAt, counts: available.has(mark.lessonId),
+      })),
+    };
+  });
+  return {
+    title: course.title, totalLessons: lessons.length, totalEnrolled: students.length,
+    finished: students.filter(row => lessons.length > 0 && row.completed === lessons.length).length,
+    students,
+  };
 }
