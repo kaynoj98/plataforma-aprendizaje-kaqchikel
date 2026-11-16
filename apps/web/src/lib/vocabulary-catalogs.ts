@@ -15,6 +15,7 @@ type CatalogResponse = {
   success: boolean;
   data?: {
     items: CatalogItem[];
+    pagination: { totalPages: number };
   };
 };
 
@@ -29,30 +30,33 @@ export async function getActiveVocabularyCatalog(
   const apiUrl = process.env.API_INTERNAL_URL ?? "http://127.0.0.1:4000";
 
   try {
-    const response = await fetch(
-      `${apiUrl}/api/v1/admin/vocabulary/${kind}?page=1&pageSize=50`,
-      {
-        headers: {
-          Cookie: `kaqchikel_session=${session.value}`,
+    const options: CatalogOption[] = [];
+    for (let page = 1; ; page++) {
+      const response = await fetch(
+        `${apiUrl}/api/v1/admin/vocabulary/${kind}?isActive=true&page=${page}&pageSize=50`,
+        {
+          headers: {
+            Cookie: `kaqchikel_session=${session.value}`,
+          },
+          cache: "no-store",
         },
-        cache: "no-store",
-      },
-    );
+      );
 
-    if (!response.ok) return null;
+      if (!response.ok) return null;
 
-    const result = (await response.json()) as CatalogResponse;
+      const result = (await response.json()) as CatalogResponse;
 
-    if (!result.success || !result.data) {
-      return null;
+      if (!result.success || !result.data) {
+        return null;
+      }
+
+      options.push(...result.data.items.map(({ id, name }) => ({ id, name })));
+      if (
+        !result.data.items.length ||
+        page >= result.data.pagination.totalPages
+      )
+        return options;
     }
-
-    return result.data.items
-      .filter((item) => item.isActive)
-      .map((item) => ({
-        id: item.id,
-        name: item.name,
-      }));
   } catch {
     return null;
   }

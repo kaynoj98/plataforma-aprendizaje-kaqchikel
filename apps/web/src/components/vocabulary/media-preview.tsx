@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-type Kind = "image" | "audio";
+export type MediaKind = "image" | "audio" | "video";
+type Kind = MediaKind;
 
 export function httpError(status: number) {
   switch (status) {
@@ -16,18 +17,19 @@ export function httpError(status: number) {
   }
 }
 
-export function Preview({ kind, src, onError }: { kind: Kind; src: string; onError: () => void }) {
+export function Preview({ kind, src, label, onError }: { kind: Kind; src: string; label?: string; onError: () => void }) {
+  if (kind === "video") return <video aria-label={label || "Video educativo"} className="w-full rounded-md" controls playsInline preload="metadata" src={src} onError={onError} />;
   if (kind === "audio") {
-    return <audio aria-label="Audio de pronunciación" className="w-full" controls preload="metadata"
+    return <audio aria-label={label || "Audio de pronunciación"} className="w-full" controls preload="metadata"
       src={src} onError={onError} />;
   }
   // El recurso puede ser un blob local o una URL firmada de corta duración.
   // eslint-disable-next-line @next/next/no-img-element
   return <img className="max-h-52 max-w-full rounded-md object-contain"
-    alt="Imagen de vocabulario" src={src} onError={onError} />;
+    alt={label || "Imagen de vocabulario"} src={src} onError={onError} />;
 }
 
-export function StoredPreview({ kind, id, showName = false }: { kind: Kind; id: string; showName?: boolean }) {
+export function StoredPreview({ kind, id, label, showName = false }: { kind: Kind; id: string; label?: string; showName?: boolean }) {
   const [attempt, setAttempt] = useState(0);
   const [link, setLink] = useState<{ url: string; expires: number; name?: string }>();
   const [error, setError] = useState("");
@@ -65,7 +67,7 @@ export function StoredPreview({ kind, id, showName = false }: { kind: Kind; id: 
     <Button type="button" variant="outline" onClick={refresh}>Reintentar vista previa</Button></div>;
   if (!link) return <p role="status">Cargando vista previa…</p>;
   return <>
-    <Preview kind={kind} src={link.url} onError={() => {
+    <Preview kind={kind} label={label} src={link.url} onError={() => {
       if (Date.now() >= link.expires - 1000) refresh();
       else setError("No se pudo abrir el archivo multimedia.");
     }} />

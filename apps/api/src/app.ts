@@ -7,6 +7,7 @@ import { env } from "./config/envSchema.js";
 import { errorHandler } from "./middlewares/error-handler.js";
 import { notFoundHandler } from "./middlewares/not-found.js";
 import { healthRouter } from "./routes/health.routes.js";
+import { activityRouter } from "./modules/activities/activity.routes.js";
 import { adminEnrollmentRouter, enrollmentRouter } from "./modules/enrollments/enrollment.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { adminUserRouter, userRouter } from "./modules/users/user.routes.js";
@@ -71,5 +72,6 @@ app.use("/api/v1/vocabulary", publicVocabularyRouter);
 app.use("/api/v1/admin/lessons", adminLessonVocabularyRouter);
 app.use("/api/v1/lessons", lessonVocabularyRouter);
 
+app.use("/api/v1", activityRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);

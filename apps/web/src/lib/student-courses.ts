@@ -70,7 +70,7 @@ export async function getCourses(page: number) {
 
 type Entry = { id: string; title: string; description: string | null };
 type Level = Entry & { units: (Entry & { lessons: (Entry & { estimatedMinutes: number })[] })[] };
-type Block = { id: string; type: string; title: string | null; content: Record<string, unknown> };
+type Block = { id: string; mediaId: string | null; type: string; title: string | null; content: Record<string, unknown> };
 type Lesson = Entry & {
   estimatedMinutes: number;
   unit: { title: string; level: { title: string; course: { id: string; title: string } } };

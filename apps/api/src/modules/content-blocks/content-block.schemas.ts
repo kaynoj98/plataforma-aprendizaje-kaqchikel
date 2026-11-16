@@ -37,6 +37,7 @@ export const createContentBlockSchema = z
       .optional(),
 
     content: contentSchema,
+    mediaId: z.uuid().optional(),
 
     position: z.coerce
       .number()
@@ -69,6 +70,7 @@ export const updateContentBlockSchema = z
     title: z.string().trim().max(200).nullable().optional(),
 
     content: contentSchema.optional(),
+    mediaId: z.uuid().nullable().optional(),
 
     position: z.coerce.number().int().min(0).optional(),
 

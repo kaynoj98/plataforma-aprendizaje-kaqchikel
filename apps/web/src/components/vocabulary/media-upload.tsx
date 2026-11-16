@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AudioLines, Check, ImagePlus, Loader2, Upload } from "lucide-react";
+import { AudioLines, Check, ImagePlus, Loader2, Upload, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 import { httpError, Preview, StoredPreview } from "./media-preview";
 
-type Kind = "image" | "audio";
+type Kind = "image" | "audio" | "video";
 
 const formats: Record<Kind, Record<string, string[]>> = {
+  video: { "video/mp4": ["mp4"], "video/webm": ["webm"] },
   image: {
     "image/jpeg": ["jpg", "jpeg", "jfif"],
     "image/png": ["png"],
@@ -25,8 +26,9 @@ const formats: Record<Kind, Record<string, string[]>> = {
   },
 };
 
-export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: {
+export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending, lesson = false }: {
   kind: Kind;
+  lesson?: boolean;
   mediaId?: string;
   disabled: boolean;
   onUploaded: (id: string) => void;
@@ -35,6 +37,11 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
   const lock = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [file, setFile] = useState<File>();
   const [localUrl, setLocalUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,10 +52,11 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
   const limit = isImage ? 10 : 30;
   const allowed = formats[kind];
   const extensions = [...new Set(Object.values(allowed).flat())];
-  const Icon = isImage ? ImagePlus : AudioLines;
+  const Icon = isImage ? ImagePlus : kind === "video" ? Video : AudioLines;
+  const noun = isImage ? "imagen" : kind;
   const awaitingSave = Boolean(mediaId && mediaId === uploadedId);
-  const prompt = isImage ? "Haz clic para seleccionar una imagen" : "Haz clic para seleccionar un audio";
-  const dropHint = isImage ? "O arrastra y suelta una imagen aquí" : "O arrastra y suelta un audio aquí";
+  const prompt = isImage ? "Haz clic para seleccionar una imagen" : `Haz clic para seleccionar un ${noun}`;
+  const dropHint = isImage ? "O arrastra y suelta una imagen aquí" : `O arrastra y suelta un ${noun} aquí`;
   function clearSelection() {
     if (input.current) input.current.value = "";
     setFile(undefined);
@@ -86,11 +94,12 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
       if (!response.ok) { setError(httpError(response.status)); return; }
       const result = await response.json();
       const media = result?.data?.media;
-      if (!result?.success || media?.mediaType !== (isImage ? "IMAGE" : "AUDIO") ||
+      if (!result?.success || media?.mediaType !== kind.toUpperCase() ||
           typeof media.id !== "string" || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(media.id)) {
         setError("El servidor no confirmó el registro del archivo.");
         return;
       }
+      if (!mounted.current) return;
       onUploaded(media.id);
       clearSelection();
       setUploadedId(media.id);
@@ -104,14 +113,14 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
   return (
     <fieldset disabled={disabled || busy} className="min-w-0 space-y-3 rounded-xl border bg-card p-4 text-sm">
       <legend className="px-1.5 font-semibold">
-        {isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}
+        {lesson ? "Archivo de " + noun : isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}
       </legend>
 
       {(localUrl || mediaId) && (
         <div className="min-w-0 space-y-2 rounded-lg bg-muted/50 p-3">
           <p className="text-xs font-medium">
             {file ? "Selección pendiente de subir" : awaitingSave ? "Subida pendiente de asociar"
-              : isImage ? "Imagen asociada" : "Audio asociado"}
+              : isImage ? "Imagen asociada" : "Archivo asociado"}
           </p>
           <div className={cn("min-w-0", isImage && "grid min-h-24 place-items-center [&_img]:max-h-36")}>
             {localUrl ? (
@@ -162,7 +171,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
           <Icon aria-hidden="true" className="size-6 shrink-0 text-primary" />
           <span className="min-w-0">
             <span className="block font-medium">{dragging ? "Suelta el archivo aquí" : mediaId || file
-              ? isImage ? "Seleccionar otra imagen" : "Seleccionar otro audio"
+              ? isImage ? "Seleccionar otra imagen" : `Seleccionar otro ${noun}`
               : prompt}</span>
             <span className="block text-xs text-muted-foreground">{dropHint}</span>
           </span>
@@ -176,7 +185,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
         <div className="flex flex-wrap gap-2">
           <Button type="button" className="min-h-11" disabled={busy || disabled} onClick={upload}>
             {busy ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <Upload aria-hidden="true" />}
-            {busy ? "Subiendo…" : isImage ? "Subir imagen" : "Subir audio"}
+            {busy ? "Subiendo…" : "Subir " + noun}
           </Button>
           <Button type="button" variant="ghost" className="min-h-11" onClick={() => select()}>Descartar</Button>
         </div>
@@ -186,7 +195,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending }: 
         {busy ? "Subida en curso…" : awaitingSave && !file && (
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />
-            Archivo subido. Guarda los cambios para asociarlo a la palabra.
+            Archivo subido. Guarda los cambios para asociarlo {lesson ? "al bloque" : "a la palabra"}.
           </p>
         )}
       </div>

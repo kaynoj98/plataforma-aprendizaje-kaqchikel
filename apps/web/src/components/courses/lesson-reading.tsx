@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LessonPractices } from "@/components/activities/practice";
 import { StoredPreview } from "@/components/vocabulary/media-preview";
 import { getCourseLesson, getCourseProgress } from "@/lib/student-courses";
 import { ProgressAction } from "@/components/courses/progress-action";
@@ -23,9 +24,25 @@ export async function LessonReading({ courseId, lessonId, preview = false }: { c
           {blocks.length === 0 && <p className="text-sm text-muted-foreground">Aún no hay contenido de lectura disponible.</p>}
           {blocks.map(block => {
             const text = typeof block.content?.text === "string" ? block.content.text.trim() : "";
+            if (["IMAGE","AUDIO","VIDEO"].includes(block.type) && block.mediaId) {
+              const kind = block.type === "IMAGE" ? "image" : block.type === "AUDIO" ? "audio" : "video";
+              const caption = block.content[kind === "image" ? "description" : "transcript"];
+              return <figure key={block.id} className="space-y-2 rounded-lg border p-3">
+                {block.title && <h2 className="font-semibold">{block.title}</h2>}
+                <StoredPreview kind={kind} id={block.mediaId} label={kind === "image" && typeof block.content.alt === "string" ? block.content.alt : block.title ?? undefined} />
+                {typeof caption === "string" && caption && <figcaption className="whitespace-pre-wrap">{caption}</figcaption>}
+              </figure>;
+            }
             if (block.type === "HEADING") {
               const Heading = block.content.level === 3 ? "h3" : "h2";
               return <Heading key={block.id} className="text-xl font-semibold">{text || block.title}</Heading>;
+            }
+            if (block.type === "EXAMPLE" && typeof block.content.kaqchikel === "string" && typeof block.content.spanish === "string") {
+              return <section key={block.id} className="space-y-2 rounded-lg border-l-2 bg-muted/40 p-4">
+                {block.title && <h2 className="font-semibold">{block.title}</h2>}
+                <p lang="cak" className="whitespace-pre-line">{block.content.kaqchikel}</p>
+                <p className="whitespace-pre-line text-muted-foreground">{block.content.spanish}</p>
+              </section>;
             }
             return (
               <section key={block.id} className="space-y-2">
@@ -51,6 +68,7 @@ export async function LessonReading({ courseId, lessonId, preview = false }: { c
             </ul>
           </section>
         )}
+        <LessonPractices key={lessonId} lessonId={lessonId} preview={preview} />
         {!preview && <section aria-label="Tu progreso" className="space-y-3 rounded-xl border bg-card p-5">
           {progress?.completedLessonIds.includes(lesson.id)
             ? <p role="status" className="font-medium">Lección completada</p>

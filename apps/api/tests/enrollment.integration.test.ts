@@ -3,6 +3,7 @@ import argon2 from "argon2";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
+import { storageService } from "../src/services/storage.service.js";
 import { prisma } from "../src/lib/prisma.js";
 
 // Ejecutar explícitamente contra el PostgreSQL de desarrollo del proyecto.
@@ -15,6 +16,7 @@ describe.runIf(process.env.TEST_ENROLLMENTS_DB === "1")("inscripción y progreso
 
     const courseId = randomUUID();
     const otherCourseId = randomUUID();
+    const wordId = randomUUID();
     const levelId = randomUUID();
     const unitId = randomUUID();
     const first = randomUUID();
@@ -57,6 +59,100 @@ describe.runIf(process.env.TEST_ENROLLMENTS_DB === "1")("inscripción y progreso
       const publishedCourse = (await student.get("/api/v1/courses/" + draft.id + "/structure").expect(200)).body.data.course;
       expect(publishedCourse.levels[0]).toMatchObject({ id: level.id, position: 3,
         units: [{ id: unit.id, position: 2, lessons: [{ id: lesson.id, position: 1 }] }] });
+      const collection = api + "/lessons/" + lesson.id + "/blocks";
+      // Archivo real exclusivo de esta ejecución. Verifica la autorización antes de firmar ambas rutas.
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=", "base64");
+      await admin.post(api + "/media").attach("file", Buffer.from("archivo inválido"), {
+        filename: "incorrecta.png", contentType: "image/png",
+      }).expect(400);
+      const file = (await admin.post(api + "/media").attach("file", png, {
+        filename: "prueba-56.png", contentType: "image/png",
+      }).expect(201)).body.data.media;
+      const access = "/api/v1/media/" + file.id;
+      await student.get(access + "/access").expect(404);
+      await student.get(access + "/download").expect(404);
+      const picture = {type:"IMAGE", mediaId:file.id, content:{alt:"ä tz’", description:"Imagen temporal"}, isVisible:false};
+      await admin.post(collection).send({...picture,type:"AUDIO"}).expect(400);
+      await admin.post(collection).send({...picture,content:{}}).expect(400);
+      const imageBlock = (await admin.post(collection).send(picture).expect(201)).body.data.block;
+      const imagePath = api + "/blocks/" + imageBlock.id;
+      await admin.get(access + "/access").expect(200);
+      await student.get(access + "/access").expect(404);
+      await admin.delete(api + "/media/" + file.id).expect(409);
+      await admin.patch(imagePath).send({isVisible:true}).expect(200);
+      const signed = (await student.get(access + "/access").expect(200)).body.data.url;
+      const imageResponse = await fetch(signed);
+      expect(imageResponse.status).toBe(200);
+      expect(Buffer.from(await imageResponse.arrayBuffer()).equals(png)).toBe(true);
+      const reading = (await student.get("/api/v1/lessons/"+lesson.id).expect(200)).body.data.lesson;
+      expect(reading.blocks[0]).toMatchObject({mediaId:file.id,content:picture.content});
+      await admin.post(api + "/levels/" + level.id + "/unpublish").expect(200);
+      await student.get(access + "/download").expect(404);
+      await admin.post(api + "/levels/" + level.id + "/publish").expect(200);
+      const replacement = (await admin.post(api + "/media").attach("file", png, {
+        filename:"reemplazo.png", contentType:"image/png",
+      }).expect(201)).body.data.media;
+      await admin.patch(imagePath).send({mediaId:replacement.id}).expect(200);
+      await student.get(access + "/access").expect(404);
+      await admin.get(access + "/access").expect(200);
+      const word = await prisma.vocabularyItem.create({data:{id:wordId,termKaqchikel:"Prueba · ä",
+        translationSpanish:"Temporal",isActive:false}});
+      await admin.patch(api + "/vocabulary/" + word.id).send({imageMediaId:file.id}).expect(200);
+      await admin.delete(api + "/media/" + file.id).expect(409);
+      await student.get(access + "/download").expect(404);
+      await admin.patch(api + "/vocabulary/" + word.id).send({isActive:true}).expect(200);
+      await student.get(access + "/access").expect(200);
+      const words = api + "/lessons/" + lesson.id + "/vocabulary";
+      await admin.put(words + "/" + word.id).send({position:4,isVisible:true}).expect(200);
+      const publicWords = "/api/v1/lessons/" + lesson.id + "/vocabulary";
+      expect((await student.get(publicWords).expect(200)).body.data.items[0]).toMatchObject({
+        position:4, vocabulary:{id:wordId,imageMedia:{id:file.id}},
+      });
+      await admin.delete(words + "/" + word.id).expect(200);
+      expect((await student.get(publicWords).expect(200)).body.data.items).toEqual([]);
+      await admin.patch(api + "/vocabulary/" + word.id).send({imageMediaId:null}).expect(200);
+      await admin.delete(imagePath).expect(200);
+      await admin.delete(api + "/media/" + replacement.id).expect(200);
+      await student.get(access + "/access").expect(404);
+      await admin.delete(api + "/media/" + file.id).expect(200);
+      for (const [type, filename, mime] of [
+        ["AUDIO", "lesson-silence.wav", "audio/wav"], ["VIDEO", "lesson-frame.webm", "video/webm"],
+      ] as const) {
+        const media = (await admin.post(api + "/media")
+          .attach("file", "tests/fixtures/" + filename, {contentType:mime}).expect(201)).body.data.media;
+        const created = (await admin.post(collection).send({type, mediaId:media.id,
+          content:{transcript:"Prueba · ch’"}, position:3, isVisible:true}).expect(201)).body.data.block;
+        expect(created).toMatchObject({type, mediaId:media.id, position:3});
+        const link = (await student.get("/api/v1/media/" + media.id + "/access").expect(200)).body.data.url;
+        const resource = await fetch(link);
+        expect(resource.headers.get("content-type")).toBe(mime);
+        expect((await resource.arrayBuffer()).byteLength).toBe(media.sizeBytes);
+        await admin.delete(api + "/blocks/" + created.id).expect(200);
+        await student.get("/api/v1/media/" + media.id + "/download").expect(404);
+        await admin.delete(api + "/media/" + media.id).expect(200);
+      }
+      const snapshot = async () => (await admin.get(collection).expect(200)).body.data;
+      const empty = await snapshot();
+      const unicode = "ä, ë, ï, ö, ü, tz’, ch’, k’, q’, b’, t’";
+      const payload = { type: "TEXT", position: 0, isVisible: false, content: { text: unicode, extra: "conservar" } };
+      await student.post(collection).send(payload).expect(403);
+      const added = (await admin.post(collection).set("X-Lesson-Revision", empty.revision).send(payload).expect(201)).body.data.block;
+      await admin.post(collection).set("X-Lesson-Revision", empty.revision).send(payload).expect(409);
+      const example = (await admin.post(collection).send({ type: "EXAMPLE", position: 1, isVisible: false,
+        content: { kaqchikel: unicode, spanish: "Ejemplo de prueba" } }).expect(201)).body.data.block;
+      const changed = { ...added.content, text: unicode + " · prueba" };
+      const blockPath = api + "/blocks/" + added.id;
+      await admin.patch(blockPath).set("X-Lesson-Revision", (await snapshot()).revision)
+        .send({ content: changed, isVisible: true }).expect(200);
+      await admin.patch(blockPath).set("X-Lesson-Revision", empty.revision).send({ isVisible: false }).expect(409);
+      const ordering = { blocks: [{ blockId: added.id, position: 1 }, { blockId: example.id, position: 0 }] };
+      await admin.patch(collection + "/reorder").set("X-Lesson-Revision", (await snapshot()).revision).send(ordering).expect(200);
+      expect((await snapshot()).blocks.map((b: {id: string}) => b.id)).toEqual([example.id, added.id]);
+      expect(await prisma.lessonContentBlock.findUnique({ where: { id: added.id } })).toMatchObject({ position: 1, content: changed });
+      const studentLesson = (await student.get("/api/v1/lessons/" + lesson.id).expect(200)).body.data.lesson;
+      expect(studentLesson.blocks.map((b: {id: string}) => b.id)).toEqual([added.id]);
+      await admin.delete(blockPath).set("X-Lesson-Revision", (await snapshot()).revision).expect(200);
+      expect((await prisma.lessonContentBlock.findUniqueOrThrow({ where: { id: added.id } })).deletedAt).not.toBeNull();
       await admin.post(api + "/lessons/" + lesson.id + "/unpublish").expect(200);
       await student.get("/api/v1/lessons/" + lesson.id).expect(404);
       await admin.post(api + "/courses/" + draft.id + "/archive").expect(200);
@@ -129,11 +225,15 @@ describe.runIf(process.env.TEST_ENROLLMENTS_DB === "1")("inscripción y progreso
       );
       await student.put(path).expect(404);
     } finally {
+      for (const media of await prisma.mediaFile.findMany({where:{uploadedById:userIds[2]}}))
+        await storageService.delete(media.objectKey);
       await prisma.$transaction([
         prisma.enrollment.deleteMany({ where: { courseId: { in: [courseId, otherCourseId] }, userId: { in: userIds } } }),
         prisma.course.deleteMany({ where: { createdById: userIds[2], OR: [
           { id: { in: [courseId, otherCourseId] } }, { slug: "prueba-panel-" + courseId },
         ] } }),
+        prisma.vocabularyItem.deleteMany({where:{id:wordId}}),
+        prisma.mediaFile.deleteMany({where:{uploadedById:userIds[2]}}),
         prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } }),
         prisma.user.deleteMany({ where: { id: { in: userIds }, email: { endsWith: "@example.invalid" } } }),
       ]);

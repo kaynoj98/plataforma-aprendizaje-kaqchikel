@@ -59,7 +59,8 @@ export const getAdminMedia: RequestHandler = async (request, response) => {
 export const accessMedia: RequestHandler = async (request, response) => {
   const params = request.validatedParams as MediaIdParams;
 
-  const result = await mediaService.createAccessUrl(params.mediaId, false);
+  const result = await mediaService.createAccessUrl(params.mediaId, request.auth?.user.role === "ADMIN", false);
+  response.set("Cache-Control", "private, no-store");
 
   response.status(200).json({
     success: true,
@@ -71,7 +72,8 @@ export const accessMedia: RequestHandler = async (request, response) => {
 export const downloadMedia: RequestHandler = async (request, response) => {
   const params = request.validatedParams as MediaIdParams;
 
-  const result = await mediaService.createAccessUrl(params.mediaId, true);
+  const result = await mediaService.createAccessUrl(params.mediaId, request.auth?.user.role === "ADMIN", true);
+  response.set("Cache-Control", "private, no-store");
 
   response.status(200).json({
     success: true,

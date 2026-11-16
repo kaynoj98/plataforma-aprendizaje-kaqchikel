@@ -7,7 +7,7 @@ import { Prisma } from "../src/generated/prisma/client.js";
 const mocks = vi.hoisted(() => {
   const delegate = () => Object.fromEntries(["findFirst", "findUnique", "findMany", "count", "create", "update", "upsert"].map((key) => [key, vi.fn()]));
   return { db: { vocabularyItem: delegate(), vocabularyCategory: delegate(), vocabularyVariant: delegate(),
-    lesson: delegate(), lessonVocabulary: delegate(), mediaFile: delegate(), auditLog: delegate(), $transaction: vi.fn() },
+    lesson: delegate(), lessonVocabulary: delegate(), mediaFile: delegate(), auditLog: delegate(), $transaction: vi.fn(), $queryRaw: vi.fn() },
     validateSession: vi.fn() };
 });
 vi.mock("../src/lib/prisma.js", () => ({ prisma: mocks.db }));
@@ -203,6 +203,18 @@ describe("catálogos y relaciones por lección", () => {
 });
 
 describe("multimedia y montaje en app.ts", () => {
+  it.each(["access", "download"])("rechaza %s de un UUID sin referencia pública", async (operation) => {
+    mocks.validateSession.mockResolvedValue({ user: { id, role: "USER" } });
+    mocks.db.mediaFile.findFirst.mockResolvedValue(null);
+    await request(app).get(`/api/v1/media/${id}/${operation}`).set("Cookie", cookie()).expect(404);
+    expect(mocks.db.mediaFile.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id, deletedAt: null, status: "AVAILABLE", OR: expect.arrayContaining([
+        { vocabularyImages: { some: { isActive: true } } },
+        { vocabularyPronunciations: { some: { isActive: true } } },
+      ]) }),
+    }));
+    expect(storageService.createAccessUrl).not.toHaveBeenCalled();
+  });
   it("reutiliza acceso firmado sin exponer campos privados de MediaFile", async () => {
     mocks.db.mediaFile.findFirst.mockResolvedValue({
       id, originalName: "utz.mp3", mediaType: "AUDIO", mimeType: "audio/mpeg", sizeBytes: 123,

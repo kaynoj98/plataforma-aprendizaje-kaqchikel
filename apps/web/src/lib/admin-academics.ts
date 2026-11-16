@@ -55,3 +55,29 @@ type Report = {
 export async function readReport(courseId: string) {
   return (await adminRead<{ data: Report }>(`courses/${academicId(courseId)}/enrollments`)).data;
 }
+
+export type LessonBlock = {
+  id: string; lessonId: string; mediaId: string | null; type: string; title: string | null;
+  position: number; isVisible: boolean; content: Record<string, unknown>;
+};
+export type BlockList = { blocks: LessonBlock[]; revision: string };
+
+export type LessonWord = {
+  id: string; termKaqchikel: string; translationEs: string; isActive: boolean;
+  imageMedia: { id: string } | null; pronunciationMedia: { id: string } | null;
+};
+export type LessonWordLink = { position: number; isVisible: boolean; vocabulary: LessonWord };
+
+export async function readLessonWords(lessonId: string) {
+  const result = await adminRead<{ data: { items: LessonWordLink[] } }>(
+    "lessons/" + academicId(lessonId) + "/vocabulary",
+  );
+  return result.data.items;
+}
+
+export async function readBlocks(lessonId: string) {
+  const result = await adminRead<{ data: BlockList }>(`lessons/${academicId(lessonId)}/blocks`);
+  if (typeof result.data.revision !== "string") throw new Error("La API de bloques requiere actualización.");
+  if (result.data.blocks.some(block => block.lessonId !== lessonId)) notFound();
+  return result.data;
+}

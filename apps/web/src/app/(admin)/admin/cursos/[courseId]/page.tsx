@@ -54,7 +54,8 @@ export default async function CourseAdmin({ params, searchParams }: {
         href={levelId => base + "?nivel=" + levelId + "#unidades"} action="Ver unidades" />
       {level && <div id="unidades"><StructureList title={"Unidades · " + level.title} kind="units" rows={units}
         collection={`levels/${level.id}/units`} href={unitId => base + "?nivel=" + level.id + "&unidad=" + unitId + "#lecciones"} action="Ver lecciones" /></div>}
-      {unit && <div id="lecciones"><StructureList title={"Lecciones · " + unit.title} kind="lessons" rows={lessons} collection={`units/${unit.id}/lessons`} /></div>}
+      {unit && <div id="lecciones"><StructureList title={"Lecciones · " + unit.title} kind="lessons" rows={lessons} collection={`units/${unit.id}/lessons`}
+        href={lessonId => `${base}/niveles/${level!.id}/unidades/${unit.id}/lecciones/${lessonId}/contenido`} action="Editar contenido" /></div>}
     </div>
   </div>;
 }

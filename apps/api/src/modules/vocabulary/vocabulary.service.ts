@@ -58,7 +58,9 @@ async function validateReferences(tx: Prisma.TransactionClient, input: UpdateVoc
   if (input.variantId && !await tx.vocabularyVariant.findFirst({ where: { id: input.variantId, isActive: true } }))
     throw new AppError(400, "VARIANT_NOT_FOUND", "La variante no existe o está inactiva.");
   for (const [id, mediaType] of [[input.pronunciationMediaId, "AUDIO"], [input.imageMediaId, "IMAGE"]] as const) {
-    if (id && !await tx.mediaFile.findFirst({ where: { id, mediaType, status: "AVAILABLE", deletedAt: null } }))
+    if (!id) continue;
+    await tx.$queryRaw`SELECT id FROM media_files WHERE id = ${id}::uuid FOR SHARE`;
+    if (!await tx.mediaFile.findFirst({ where: { id, mediaType, status: "AVAILABLE", deletedAt: null } }))
       throw new AppError(400, "INVALID_MEDIA", `El archivo ${mediaType} no existe o no está disponible.`);
   }
 }

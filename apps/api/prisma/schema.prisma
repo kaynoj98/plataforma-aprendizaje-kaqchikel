@@ -103,6 +103,7 @@ model User {
 
   uploadedMedia MediaFile[] @relation("MediaUploader")
   enrollments   Enrollment[]
+  activityAttempts ActivityAttempt[]
 
   @@index([role])
   @@index([profileType])
@@ -328,6 +329,7 @@ model Lesson {
   unit CourseUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   blocks LessonContentBlock[]
+  activities Activity[]
 
   vocabularyItems LessonVocabulary[]
   progress        LessonProgress[]
@@ -378,6 +380,9 @@ model LessonContentBlock {
   id       String @id @default(uuid()) @db.Uuid
   lessonId String @map("lesson_id") @db.Uuid
 
+  mediaId String? @map("media_id") @db.Uuid
+  media MediaFile? @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
   type ContentBlockType
 
   title   String? @db.VarChar(200)
@@ -398,6 +403,7 @@ model LessonContentBlock {
   @@index([type])
   @@index([position])
   @@index([deletedAt])
+  @@index([mediaId])
   @@map("lesson_content_blocks")
 }
 
@@ -428,6 +434,7 @@ model MediaFile {
 
   uploadedBy User @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
 
+  lessonBlocks LessonContentBlock[]
   vocabularyPronunciations VocabularyItem[] @relation("VocabularyPronunciationMedia")
   vocabularyImages         VocabularyItem[] @relation("VocabularyImageMedia")
 
@@ -531,6 +538,7 @@ model VocabularyItem {
   imageMedia MediaFile? @relation("VocabularyImageMedia", fields: [imageMediaId], references: [id], onDelete: SetNull)
 
   lessonLinks LessonVocabulary[]
+  activityQuestions ActivityQuestion[]
 
   @@index([termKaqchikel])
   @@index([translationSpanish])
@@ -570,4 +578,94 @@ model LessonVocabulary {
   @@index([position])
   @@index([isVisible])
   @@map("lesson_vocabulary")
+}
+
+enum ActivityType {
+  MULTIPLE_CHOICE
+}
+
+model Activity {
+  id String @id @default(uuid()) @db.Uuid
+  lessonId String @map("lesson_id") @db.Uuid
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  type ActivityType @default(MULTIPLE_CHOICE)
+  position Int @default(0)
+  isVisible Boolean @default(false) @map("is_visible")
+  revision Int @default(1)
+  versions ActivityVersion[]
+  @@index([lessonId, position])
+  @@map("activities")
+}
+
+model ActivityVersion {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @map("activity_id") @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  number Int
+  title String @db.VarChar(200)
+  instructions String
+  questions ActivityQuestion[]
+  attempts ActivityAttempt[]
+  @@unique([activityId, number])
+  @@map("activity_versions")
+}
+
+model ActivityQuestion {
+  id String @id @default(uuid()) @db.Uuid
+  versionId String @map("version_id") @db.Uuid
+  version ActivityVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  prompt String
+  feedback String
+  position Int
+  correctPosition Int @map("correct_position")
+  vocabularyId String? @map("vocabulary_id") @db.Uuid
+  vocabulary VocabularyItem? @relation(fields:[vocabularyId], references:[id], onDelete:Restrict)
+  termSnapshot String? @map("term_snapshot")
+  options ActivityOption[]
+  answers ActivityAnswer[]
+  @@unique([versionId,position])
+  @@unique([id,versionId])
+  @@map("activity_questions")
+}
+
+model ActivityOption {
+  id String @id @default(uuid()) @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  question ActivityQuestion @relation(fields:[questionId], references:[id], onDelete:Restrict)
+  position Int
+  label String
+  answers ActivityAnswer[]
+  @@unique([questionId,position])
+  @@unique([id,questionId])
+  @@map("activity_options")
+}
+
+model ActivityAttempt {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Restrict)
+  versionId String @map("version_id") @db.Uuid
+  version ActivityVersion @relation(fields:[versionId], references:[id], onDelete:Restrict)
+  requestId String @map("request_id") @db.Uuid
+  startedAt DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
+  answers ActivityAnswer[]
+  @@unique([userId,requestId])
+  @@unique([id,versionId])
+  @@index([userId,versionId])
+  @@map("activity_attempts")
+}
+
+model ActivityAnswer {
+  attemptId String @map("attempt_id") @db.Uuid
+  versionId String @map("version_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  optionId String @map("option_id") @db.Uuid
+  attempt ActivityAttempt @relation(fields:[attemptId,versionId],references:[id,versionId], onDelete:Restrict)
+  question ActivityQuestion @relation(fields:[questionId,versionId],references:[id,versionId], onDelete:Restrict)
+  option ActivityOption @relation(fields:[optionId,questionId],references:[id,questionId], onDelete:Restrict)
+  correct Boolean
+  answeredAt DateTime @default(now()) @map("answered_at") @db.Timestamptz(3)
+  @@id([attemptId,questionId])
+  @@map("activity_answers")
 }

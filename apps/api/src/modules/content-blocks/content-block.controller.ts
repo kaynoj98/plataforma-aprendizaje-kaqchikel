@@ -1,3 +1,4 @@
+import { lessonRevision } from "./content-block.repository.js";
 import type { RequestHandler } from "express";
 
 import { AppError } from "../../errors/app-error.js";
@@ -28,6 +29,7 @@ export const listContentBlocks: RequestHandler = async (request, response) => {
     success: true,
     data: {
       blocks,
+      revision: lessonRevision(params.lessonId, blocks),
     },
   });
 };
@@ -56,6 +58,7 @@ export const createContentBlock: RequestHandler = async (request, response) => {
     actorUserId,
     params.lessonId,
     input,
+    request.get("X-Lesson-Revision"),
   );
 
   response.status(201).json({
@@ -78,6 +81,7 @@ export const updateContentBlock: RequestHandler = async (request, response) => {
     actorUserId,
     params.blockId,
     input,
+    request.get("X-Lesson-Revision"),
   );
 
   response.status(200).json({
@@ -94,7 +98,7 @@ export const deleteContentBlock: RequestHandler = async (request, response) => {
 
   const params = request.validatedParams as BlockIdParams;
 
-  const block = await contentBlockService.delete(actorUserId, params.blockId);
+  const block = await contentBlockService.delete(actorUserId, params.blockId, request.get("X-Lesson-Revision"));
 
   response.status(200).json({
     success: true,
@@ -119,6 +123,7 @@ export const reorderContentBlocks: RequestHandler = async (
     actorUserId,
     params.lessonId,
     input,
+    request.get("X-Lesson-Revision"),
   );
 
   response.status(200).json({

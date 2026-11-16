@@ -14,6 +14,7 @@ import {
 } from "./media.constants.js";
 
 import { mediaRepository } from "./media.repository.js";
+import { validateUploadFormat } from "./media-format.js";
 
 import type { ListMediaQuery } from "./media.schemas.js";
 
@@ -61,6 +62,7 @@ export const mediaService = {
         );
       }
 
+      await validateUploadFormat(file);
       const objectKey = createObjectKey(file, mediaType);
 
       await storageService.upload({
@@ -136,8 +138,8 @@ export const mediaService = {
     return media;
   },
 
-  async createAccessUrl(mediaId: string, download = false) {
-    const media = await mediaRepository.findById(mediaId);
+  async createAccessUrl(mediaId: string, admin: boolean, download = false) {
+    const media = await mediaRepository.findById(mediaId, admin);
 
     if (!media) {
       throw new AppError(
@@ -172,18 +174,6 @@ export const mediaService = {
   },
 
   async delete(actorUserId: string, mediaId: string) {
-    const media = await mediaRepository.findAdminById(mediaId);
-
-    if (!media) {
-      throw new AppError(
-        404,
-        "MEDIA_NOT_FOUND",
-        "El archivo multimedia no existe.",
-      );
-    }
-
-    await storageService.delete(media.objectKey);
-
     const deleted = await mediaRepository.softDelete({
       actorUserId,
       mediaId,
@@ -197,6 +187,8 @@ export const mediaService = {
       );
     }
 
+    // Primero se revoca el acceso. Un reintento puede completar la limpieza en Garage.
+    await storageService.delete(deleted.objectKey);
     return deleted;
   },
 };

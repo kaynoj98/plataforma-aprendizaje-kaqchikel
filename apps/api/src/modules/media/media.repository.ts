@@ -3,6 +3,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import { MediaStatus } from "../../generated/prisma/client.js";
 
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../errors/app-error.js";
 
 import type { ListMediaQuery } from "./media.schemas.js";
 
@@ -92,12 +93,20 @@ export const mediaRepository = {
     });
   },
 
-  findById(mediaId: string) {
+  findById(mediaId: string, admin: boolean) {
     return prisma.mediaFile.findFirst({
       where: {
         id: mediaId,
         deletedAt: null,
         status: MediaStatus.AVAILABLE,
+        ...(admin ? {} : { OR: [
+          { vocabularyImages: { some: { isActive: true } } },
+          { vocabularyPronunciations: { some: { isActive: true } } },
+          { lessonBlocks: { some: { deletedAt: null, isVisible: true,
+            lesson: { status: "PUBLISHED", deletedAt: null, unit: { status: "PUBLISHED", deletedAt: null,
+              level: { status: "PUBLISHED", deletedAt: null, course: { status: "PUBLISHED", deletedAt: null } } } },
+          } } },
+        ] }),
       },
 
       select: mediaSelect,
@@ -172,19 +181,19 @@ export const mediaRepository = {
 
   softDelete(data: { mediaId: string; actorUserId: string }) {
     return prisma.$transaction(async (transaction) => {
-      const current = await transaction.mediaFile.findFirst({
-        where: {
-          id: data.mediaId,
-
-          deletedAt: null,
-        },
-
-        select: mediaSelect,
+      await transaction.$queryRaw`SELECT id FROM media_files WHERE id = ${data.mediaId}::uuid FOR UPDATE`;
+      const current = await transaction.mediaFile.findUnique({
+        where: { id: data.mediaId }, select: mediaSelect,
       });
-
-      if (!current) {
-        return null;
-      }
+      if (!current || current.deletedAt) return current;
+      const referenced = await transaction.vocabularyItem.findFirst({
+        where: { OR: [{ imageMediaId: current.id }, { pronunciationMediaId: current.id }] },
+        select: { id: true },
+      });
+      const block = await transaction.lessonContentBlock.findFirst({
+        where: { mediaId: current.id, deletedAt: null }, select: { id: true },
+      });
+      if (referenced || block) throw new AppError(409, "MEDIA_IN_USE", "El archivo está asociado a vocabulario o a una lección.");
 
       const updated = await transaction.mediaFile.update({
         where: {

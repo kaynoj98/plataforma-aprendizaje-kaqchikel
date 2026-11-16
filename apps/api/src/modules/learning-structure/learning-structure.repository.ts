@@ -965,6 +965,7 @@ export const learningStructureRepository = {
             type: true,
             title: true,
             content: true,
+            mediaId: true,
             position: true,
             isVisible: true,
           },
