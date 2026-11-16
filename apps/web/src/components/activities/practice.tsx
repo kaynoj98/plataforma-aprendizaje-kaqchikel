@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleX, ListChecks } from "lucide-react";
+import { StoredPreview } from "@/components/vocabulary/media-preview";
 import { Button } from "@/components/ui/button";
 import { api, message, type Summary } from "./api";
 
@@ -14,7 +15,8 @@ type State = {
   question: {
     id: string;
     prompt: string;
-    term: string | null;
+    term?: string | null;
+    imageDescription?: string;
     options: { id: string; label: string }[];
   } | null;
   result: {
@@ -151,24 +153,49 @@ export function Practice({
                   <legend className="mb-3 whitespace-pre-wrap font-semibold">
                     {state.question.prompt}
                   </legend>
+                  {state.question.imageDescription && (
+                    <figure className="space-y-2 rounded-lg bg-muted/40 p-3">
+                      <div className="grid place-items-center">
+                        <StoredPreview
+                          key={state.question.id}
+                          id={state.question.id}
+                          kind="image"
+                          label="Imagen de referencia de la pregunta"
+                          accessPath={`/api/v1/${preview ? "admin/activities/" + id : "activity-attempts/" + state.attemptId}/questions/${state.question.id}/image`}
+                        />
+                      </div>
+                      <figcaption>
+                        <details>
+                          <summary className="cursor-pointer">
+                            Leer pista descriptiva
+                          </summary>
+                          <p className="mt-2 whitespace-pre-wrap">
+                            {state.question.imageDescription}
+                          </p>
+                        </details>
+                      </figcaption>
+                    </figure>
+                  )}
                   {state.question.term && (
                     <p lang="cak">{state.question.term}</p>
                   )}
-                  {state.question.options.map((o) => (
-                    <label
-                      key={o.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-muted"
-                    >
-                      <input
-                        type="radio"
-                        name={"choice-" + id}
-                        checked={selected === o.id}
-                        onChange={() => select(o.id)}
-                        className="mt-1"
-                      />
-                      <span className="min-w-0 break-words">{o.label}</span>
-                    </label>
-                  ))}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {state.question.options.map((o) => (
+                      <label
+                        key={o.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-muted"
+                      >
+                        <input
+                          type="radio"
+                          name={"choice-" + id}
+                          checked={selected === o.id}
+                          onChange={() => select(o.id)}
+                          className="mt-1"
+                        />
+                        <span className="min-w-0 break-words">{o.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </fieldset>
                 {reply ? (
                   <>

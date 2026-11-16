@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { verifyVisualActivity } from "./visual-activity.fixture.js";
+import {
+  storageService,
+  practiceImageKey,
+} from "../src/services/storage.service.js";
 import argon2 from "argon2";
 import request from "supertest";
 import { describe, it, expect } from "vitest";
@@ -275,11 +280,27 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
         ).body.data;
         expect(newAttempt.total).toBe(1);
         expect(newAttempt.versionId).not.toBe(end.versionId);
+        await verifyVisualActivity(
+          admin!,
+          user!,
+          other!,
+          lessonId,
+          wordId,
+          courseId,
+        );
         expect(await prisma.lessonProgress.count({ where: { lessonId } })).toBe(
           0,
         );
         expect(await prisma.enrollment.count({ where: { courseId } })).toBe(0);
       } finally {
+        const files = await prisma.mediaFile.findMany({
+          where: { uploadedById: users[0] },
+        });
+        for (const file of files) {
+          await storageService.delete(file.objectKey);
+          if (file.mediaType === "IMAGE")
+            await storageService.delete(practiceImageKey(file.objectKey));
+        }
         const version = { activity: { lessonId } };
         await prisma.$transaction([
           prisma.activityAnswer.deleteMany({ where: { attempt: { version } } }),
@@ -295,6 +316,7 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
           prisma.vocabularyItem.deleteMany({ where: { id: wordId } }),
           prisma.course.deleteMany({ where: { id: courseId } }),
           prisma.auditLog.deleteMany({ where: { actorUserId: { in: users } } }),
+          prisma.mediaFile.deleteMany({ where: { uploadedById: users[0] } }),
           prisma.user.deleteMany({
             where: {
               id: { in: users },
@@ -303,6 +325,6 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
           }),
         ]);
       }
-    }, 60000);
+    }, 120000);
   },
 );

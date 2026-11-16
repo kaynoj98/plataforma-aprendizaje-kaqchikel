@@ -435,6 +435,7 @@ model MediaFile {
   uploadedBy User @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
 
   lessonBlocks LessonContentBlock[]
+  activityImages ActivityQuestion[]
   vocabularyPronunciations VocabularyItem[] @relation("VocabularyPronunciationMedia")
   vocabularyImages         VocabularyItem[] @relation("VocabularyImageMedia")
 
@@ -582,6 +583,7 @@ model LessonVocabulary {
 
 enum ActivityType {
   MULTIPLE_CHOICE
+  IMAGE_RECOGNITION
 }
 
 model Activity {
@@ -621,6 +623,10 @@ model ActivityQuestion {
   vocabularyId String? @map("vocabulary_id") @db.Uuid
   vocabulary VocabularyItem? @relation(fields:[vocabularyId], references:[id], onDelete:Restrict)
   termSnapshot String? @map("term_snapshot")
+  imageMediaId String? @map("image_media_id") @db.Uuid
+  imageMedia MediaFile? @relation(fields: [imageMediaId], references: [id], onDelete: Restrict)
+  imageDescription String? @map("image_description")
+  @@index([imageMediaId])
   options ActivityOption[]
   answers ActivityAnswer[]
   @@unique([versionId,position])

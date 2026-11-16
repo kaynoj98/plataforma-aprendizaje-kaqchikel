@@ -1,7 +1,17 @@
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../errors/app-error.js";
 import { Prisma } from "../../generated/prisma/client.js";
-import { type Definition, totals } from "./activity.schemas.js";
+import { type Definition, totals, reveals } from "./activity.schemas.js";
+
+import { env } from "../../config/env.js";
+import {
+  storageService,
+  practiceImageKey,
+} from "../../services/storage.service.js";
+import {
+  MAX_BYTES_BY_MEDIA_TYPE,
+  MEDIA_TYPE_BY_MIME,
+} from "../media/media.constants.js";
 
 type Tx = Prisma.TransactionClient;
 type Choice = { questionId: string; optionId: string };
@@ -45,6 +55,7 @@ export async function listActivities(lessonId: string, admin: boolean) {
     orderBy: [{ position: "asc" }, { id: "asc" }],
     select: {
       id: true,
+      type: true,
       position: true,
       isVisible: true,
       revision: true,
@@ -79,7 +90,7 @@ async function writeVersion(
   ];
   const words = await tx.vocabularyItem.findMany({
     where: { id: { in: ids }, isActive: true },
-    select: { id: true, termKaqchikel: true },
+    select: { id: true, termKaqchikel: true, translationSpanish: true },
   });
   if (words.length !== ids.length)
     throw new AppError(
@@ -88,6 +99,52 @@ async function writeVersion(
       "Revisa los términos de vocabulario seleccionados.",
     );
   const terms = new Map(words.map((w) => [w.id, w.termKaqchikel]));
+  const imageIds = [
+    ...new Set(
+      draft.questions.flatMap((q) => (q.imageMediaId ? [q.imageMediaId] : [])),
+    ),
+  ].sort();
+  if (imageIds.length) {
+    // El borrado lógico adquiere el mismo bloqueo antes de consultar las referencias.
+    await tx.$queryRaw`SELECT id FROM media_files WHERE id IN (${Prisma.join(imageIds.map((id) => Prisma.sql`${id}::uuid`))}) ORDER BY id FOR UPDATE`;
+    const images = await tx.mediaFile.findMany({
+      where: {
+        id: { in: imageIds },
+        mediaType: "IMAGE",
+        status: "AVAILABLE",
+        deletedAt: null,
+        mimeType: {
+          in: Object.keys(MEDIA_TYPE_BY_MIME).filter(
+            (mime) => MEDIA_TYPE_BY_MIME[mime] === "IMAGE",
+          ),
+        },
+        sizeBytes: { gt: 0, lte: MAX_BYTES_BY_MEDIA_TYPE.IMAGE },
+      },
+      select: { objectKey: true },
+    });
+    if (images.length !== imageIds.length)
+      throw new AppError(
+        400,
+        "INVALID_IMAGE",
+        "Selecciona una imagen disponible de hasta 10 MiB.",
+      );
+    for (const q of draft.questions) {
+      const linked = words.find((w) => w.id === q.vocabularyId);
+      if (
+        linked &&
+        [linked.termKaqchikel, linked.translationSpanish].some((label) =>
+          reveals(q.imageDescription, label),
+        )
+      )
+        throw new AppError(
+          400,
+          "REVEALING_DESCRIPTION",
+          "La pista contiene el término vinculado.",
+        );
+    }
+    for (const image of images)
+      await storageService.preparePracticeImage(image.objectKey);
+  }
   return tx.activityVersion.create({
     data: {
       activityId,
@@ -96,6 +153,8 @@ async function writeVersion(
       instructions: draft.instructions,
       questions: {
         create: draft.questions.map((q, position) => ({
+          imageMediaId: q.imageMediaId,
+          imageDescription: q.imageDescription,
           prompt: q.prompt,
           feedback: q.feedback,
           position,
@@ -117,27 +176,30 @@ export async function create(
   draft: Definition,
   requestId: string,
 ) {
-  return prisma.$transaction(async (tx) => {
-    if (
-      !(await tx.lesson.findFirst({
-        where: { id: lessonId, deletedAt: null },
-        select: { id: true },
-      }))
-    )
-      missing();
-    const inserted = await tx.activity.createMany({
-      data: { id: requestId, lessonId, position },
-      skipDuplicates: true,
-    });
-    if (!inserted.count)
-      throw new AppError(
-        409,
-        "ACTIVITY_EXISTS",
-        "Esta solicitud ya se guardó. Recarga las actividades.",
-      );
-    await writeVersion(tx, requestId, 1, draft);
-    return { id: requestId };
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      if (
+        !(await tx.lesson.findFirst({
+          where: { id: lessonId, deletedAt: null },
+          select: { id: true },
+        }))
+      )
+        missing();
+      const inserted = await tx.activity.createMany({
+        data: { id: requestId, lessonId, position, type: draft.type },
+        skipDuplicates: true,
+      });
+      if (!inserted.count)
+        throw new AppError(
+          409,
+          "ACTIVITY_EXISTS",
+          "Esta solicitud ya se guardó. Recarga las actividades.",
+        );
+      await writeVersion(tx, requestId, 1, draft);
+      return { id: requestId };
+    },
+    { timeout: 120000 },
+  );
 }
 export async function edit(
   id: string,
@@ -146,19 +208,27 @@ export async function edit(
   isVisible: boolean,
   draft?: Definition,
 ) {
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.activity.updateMany({
-      where: { id, revision, lesson: { deletedAt: null } },
-      data: {
-        position,
-        isVisible: draft ? false : isVisible,
-        revision: { increment: 1 },
-      },
-    });
-    if (!updated.count) conflict();
-    if (draft) await writeVersion(tx, id, revision + 1, draft);
-    return { id, revision: revision + 1 };
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      const updated = await tx.activity.updateMany({
+        where: {
+          id,
+          revision,
+          ...(draft ? { type: draft.type } : {}),
+          lesson: { deletedAt: null },
+        },
+        data: {
+          position,
+          isVisible: draft ? false : isVisible,
+          revision: { increment: 1 },
+        },
+      });
+      if (!updated.count) conflict();
+      if (draft) await writeVersion(tx, id, revision + 1, draft);
+      return { id, revision: revision + 1 };
+    },
+    { timeout: 120000 },
+  );
 }
 async function current(tx: Tx, id: string, admin: boolean) {
   const row = await tx.activity.findFirst({
@@ -175,6 +245,7 @@ export async function readAdmin(id: string) {
     position: activity.position,
     isVisible: activity.isVisible,
     definition: {
+      type: activity.type,
       title: version.title,
       instructions: version.instructions,
       questions: version.questions.map((q) => ({
@@ -182,6 +253,8 @@ export async function readAdmin(id: string) {
         feedback: q.feedback,
         vocabularyId: q.vocabularyId,
         term: q.termSnapshot,
+        imageMediaId: q.imageMediaId,
+        imageDescription: q.imageDescription,
         options: q.options.map((o) => ({
           label: o.label,
           correct: o.position === q.correctPosition,
@@ -222,13 +295,52 @@ function view(
       ? {
           id: q.id,
           prompt: q.prompt,
-          term: q.termSnapshot,
+          ...(q.imageMediaId
+            ? { imageDescription: q.imageDescription }
+            : { term: q.termSnapshot }),
           options: q.options.map(({ id, label }) => ({ id, label })),
         }
       : null,
     result: q
       ? null
       : totals(v.questions.length, answers.filter((a) => a.correct).length),
+  };
+}
+
+export async function questionImage(
+  id: string,
+  questionId: string,
+  studentId?: string,
+) {
+  const scope = studentId
+    ? { activity: available, attempts: { some: { id, userId: studentId } } }
+    : { activity: { id, lesson: { deletedAt: null } } };
+  const q = await prisma.activityQuestion.findFirst({
+    where: { id: questionId, version: scope },
+    select: {
+      imageMedia: {
+        select: {
+          objectKey: true,
+          status: true,
+          deletedAt: true,
+          mediaType: true,
+        },
+      },
+    },
+  });
+  const media = q?.imageMedia;
+  if (
+    !media ||
+    media.status !== "AVAILABLE" ||
+    media.deletedAt ||
+    media.mediaType !== "IMAGE"
+  )
+    missing();
+  return {
+    url: await storageService.createAccessUrl(
+      practiceImageKey(media.objectKey),
+    ),
+    expiresInMinutes: env.MEDIA_ACCESS_URL_MINUTES,
   };
 }
 

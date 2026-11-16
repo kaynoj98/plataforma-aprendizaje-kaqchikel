@@ -29,7 +29,7 @@ export function Preview({ kind, src, label, onError }: { kind: Kind; src: string
     alt={label || "Imagen de vocabulario"} src={src} onError={onError} />;
 }
 
-export function StoredPreview({ kind, id, label, showName = false }: { kind: Kind; id: string; label?: string; showName?: boolean }) {
+export function StoredPreview({ kind, id, label, accessPath, showName = false }: { kind: Kind; id: string; label?: string; accessPath?: string; showName?: boolean }) {
   const [attempt, setAttempt] = useState(0);
   const [link, setLink] = useState<{ url: string; expires: number; name?: string }>();
   const [error, setError] = useState("");
@@ -42,7 +42,7 @@ export function StoredPreview({ kind, id, label, showName = false }: { kind: Kin
     const controller = new AbortController();
     async function read() {
       try {
-        const response = await fetch(`/api/v1/media/${encodeURIComponent(id)}/access`, {
+        const response = await fetch(accessPath ?? `/api/v1/media/${encodeURIComponent(id)}/access`, {
           credentials: "same-origin", cache: "no-store", signal: controller.signal,
         });
         if (!response.ok) throw new Error(httpError(response.status));
@@ -62,7 +62,7 @@ export function StoredPreview({ kind, id, label, showName = false }: { kind: Kin
     }
     void read();
     return () => controller.abort();
-  }, [id, attempt]);
+  }, [id, attempt, accessPath]);
   if (error) return <div className="space-y-2"><p role="alert">{error}</p>
     <Button type="button" variant="outline" onClick={refresh}>Reintentar vista previa</Button></div>;
   if (!link) return <p role="status">Cargando vista previa…</p>;

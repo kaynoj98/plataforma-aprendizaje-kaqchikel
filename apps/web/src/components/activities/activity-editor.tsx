@@ -9,10 +9,13 @@ import {
   type Summary,
   type Document,
 } from "./api";
+import { MediaLibrary } from "@/components/academics/media-library";
+import { MediaUpload } from "@/components/vocabulary/media-upload";
 import { Practice } from "./practice";
 
 const field = "mt-1 block w-full min-w-0 rounded-lg border bg-background p-2";
 const blankQuestion = (): Question => ({
+  editorKey: crypto.randomUUID(),
   prompt: "",
   feedback: "",
   vocabularyId: null,
@@ -33,12 +36,19 @@ function swap<T>(items: T[], a: number, b: number) {
 }
 function WordPicker({
   onPick,
+  onImage,
 }: {
+  onImage?: (id: string, term: string, mediaId: string) => void;
   onPick: (id: string, term: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [words, setWords] = useState<
-    { id: string; termKaqchikel: string; translationEs: string }[]
+    {
+      id: string;
+      termKaqchikel: string;
+      translationEs: string;
+      imageMedia: { id: string } | null;
+    }[]
   >([]);
   const [status, setStatus] = useState("");
   async function find() {
@@ -76,15 +86,26 @@ function WordPicker({
       </Button>
       <p role="status">{status}</p>
       {words.map((w) => (
-        <Button
-          className="m-1 whitespace-normal"
-          type="button"
-          variant="outline"
-          key={w.id}
-          onClick={() => onPick(w.id, w.termKaqchikel)}
-        >
-          {w.termKaqchikel} · {w.translationEs}
-        </Button>
+        <div key={w.id}>
+          <Button
+            className="m-1 whitespace-normal"
+            type="button"
+            variant="outline"
+            key={w.id}
+            onClick={() => onPick(w.id, w.termKaqchikel)}
+          >
+            {w.termKaqchikel} · {w.translationEs}
+          </Button>
+          {onImage && w.imageMedia && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onImage(w.id, w.termKaqchikel, w.imageMedia!.id)}
+            >
+              Vincular y usar su imagen
+            </Button>
+          )}
+        </div>
       ))}
     </details>
   );
@@ -94,6 +115,19 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
   const [list, setList] = useState<Summary[]>([]);
   const [draft, setDraft] = useState<Definition>();
   const [selected, setSelected] = useState<Document & { id: string }>();
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const hasPending = draft?.questions.some((q) => pending[q.editorKey!]);
+  function selectImage(key: string, imageMediaId: string) {
+    setDraft(
+      (current) =>
+        current && {
+          ...current,
+          questions: current.questions.map((q) =>
+            q.editorKey === key ? { ...q, imageMediaId } : q,
+          ),
+        },
+    );
+  }
   const creationKey = useRef("");
   const contentChanged =
     !selected || JSON.stringify(selected.definition) !== JSON.stringify(draft);
@@ -137,6 +171,10 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
   function open(item: Summary) {
     void run(async () => {
       const doc = await api<Document>("admin/activities/" + item.id);
+      doc.definition.questions = doc.definition.questions.map((q) => ({
+        ...q,
+        editorKey: crypto.randomUUID(),
+      }));
       setDraft(doc.definition);
       setSelected({ ...doc, id: item.id });
       setPosition(doc.position);
@@ -144,11 +182,20 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
     });
   }
   function save() {
-    if (!draft) return;
+    if (!draft || hasPending) return;
     const definition = {
       ...draft,
       questions: draft.questions.map(
-        ({ prompt, feedback, vocabularyId, options }) => ({
+        ({
+          prompt,
+          feedback,
+          vocabularyId,
+          options,
+          imageMediaId,
+          imageDescription,
+        }) => ({
+          imageMediaId,
+          imageDescription,
           prompt,
           feedback,
           vocabularyId,
@@ -191,18 +238,24 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
       <p role="status">{busy ? "Guardando o consultando…" : notice}</p>
       {!draft && (
         <>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setSelected(undefined);
-              setPreview("");
-              setPosition((list.at(-1)?.position ?? -1) + 1);
-              creationKey.current = crypto.randomUUID();
-              setDraft(blank());
-            }}
-          >
-            Crear selección múltiple
-          </Button>
+          {(["MULTIPLE_CHOICE", "IMAGE_RECOGNITION"] as const).map((type) => (
+            <Button
+              key={type}
+              disabled={busy}
+              onClick={() => {
+                setPending({});
+                setSelected(undefined);
+                setPreview("");
+                setPosition((list.at(-1)?.position ?? -1) + 1);
+                creationKey.current = crypto.randomUUID();
+                setDraft({ ...blank(), type });
+              }}
+            >
+              {type === "IMAGE_RECOGNITION"
+                ? "Crear reconocimiento visual"
+                : "Crear selección múltiple"}
+            </Button>
+          ))}
           <Button
             variant="ghost"
             disabled={busy}
@@ -302,7 +355,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
             </label>
             {draft.questions.map((q, i) => (
               <fieldset
-                key={i}
+                key={q.editorKey}
                 className="min-w-0 space-y-3 rounded-lg border p-3"
               >
                 <legend>Pregunta {i + 1}</legend>
@@ -333,10 +386,54 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                   </p>
                 )}
                 <WordPicker
+                  onImage={
+                    draft.type === "IMAGE_RECOGNITION"
+                      ? (vocabularyId, term, imageMediaId) =>
+                          change(i, { ...q, vocabularyId, term, imageMediaId })
+                      : undefined
+                  }
                   onPick={(vocabularyId, term) =>
                     change(i, { ...q, vocabularyId, term })
                   }
                 />
+                {draft.type === "IMAGE_RECOGNITION" && (
+                  <>
+                    <MediaUpload
+                      lesson
+                      kind="image"
+                      mediaId={q.imageMediaId ?? undefined}
+                      disabled={busy}
+                      onUploaded={(id) => selectImage(q.editorKey!, id)}
+                      onPending={(value) =>
+                        setPending((prev) => ({
+                          ...prev,
+                          [q.editorKey!]: value,
+                        }))
+                      }
+                    />
+                    <MediaLibrary
+                      kind="image"
+                      disabled={busy || !!pending[q.editorKey!]}
+                      onSelect={(id) => selectImage(q.editorKey!, id)}
+                    />
+                    <label className="block">
+                      Pista descriptiva accesible
+                      <textarea
+                        required
+                        maxLength={500}
+                        className={field}
+                        value={q.imageDescription ?? ""}
+                        onChange={(e) =>
+                          change(i, { ...q, imageDescription: e.target.value })
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        Describe rasgos que permitan elegir una opción sin
+                        nombrar la solución.
+                      </span>
+                    </label>
+                  </>
+                )}
                 {q.options.map((o, j) => (
                   <div
                     key={j}
@@ -480,7 +577,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               Agregar pregunta
             </Button>
             <div className="flex flex-wrap gap-2">
-              <Button>
+              <Button disabled={hasPending}>
                 {contentChanged ? "Guardar para revisión" : "Guardar posición"}
               </Button>
               <Button

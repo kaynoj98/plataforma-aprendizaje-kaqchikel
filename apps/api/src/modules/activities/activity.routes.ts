@@ -16,6 +16,34 @@ export const activityRouter = Router();
 const id = validateParams(z.object({ id: z.uuid() }));
 const admin = [authenticate, authorize("ADMIN"), id];
 const student = [authenticate, authorize("USER"), id];
+const questionParams = validateParams(
+  z.object({ id: z.uuid(), questionId: z.uuid() }),
+);
+activityRouter.get(
+  "/activity-attempts/:id/questions/:questionId/image",
+  ...student,
+  questionParams,
+  async (req, res) => {
+    const data = await service.questionImage(
+      String(req.params.id),
+      String(req.params.questionId),
+      req.auth!.user.id,
+    );
+    res.set("Cache-Control", "private, no-store").json({ success: true, data });
+  },
+);
+activityRouter.get(
+  "/admin/activities/:id/questions/:questionId/image",
+  ...admin,
+  questionParams,
+  async (req, res) => {
+    const data = await service.questionImage(
+      String(req.params.id),
+      String(req.params.questionId),
+    );
+    res.set("Cache-Control", "private, no-store").json({ success: true, data });
+  },
+);
 const previewBody = z
   .object({ versionId: z.uuid().optional(), choices: z.array(choice).max(50) })
   .strict();

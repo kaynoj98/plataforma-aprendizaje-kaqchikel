@@ -8,6 +8,9 @@ export type Summary = {
   revision: number;
 };
 export type Question = {
+  editorKey?: string;
+  imageMediaId?: string | null;
+  imageDescription?: string | null;
   prompt: string;
   feedback: string;
   vocabularyId: string | null;
@@ -15,6 +18,7 @@ export type Question = {
   options: { label: string; correct: boolean }[];
 };
 export type Definition = {
+  type?: "MULTIPLE_CHOICE" | "IMAGE_RECOGNITION";
   title: string;
   instructions: string;
   questions: Question[];

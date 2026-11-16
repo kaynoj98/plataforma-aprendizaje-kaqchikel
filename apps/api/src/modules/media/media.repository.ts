@@ -193,6 +193,10 @@ export const mediaRepository = {
       const block = await transaction.lessonContentBlock.findFirst({
         where: { mediaId: current.id, deletedAt: null }, select: { id: true },
       });
+      const activity = await transaction.activityQuestion.findFirst({
+        where: {imageMediaId: current.id}, select: {id: true}
+      });
+      if (activity) throw new AppError(409,"MEDIA_IN_USE","Una versión de actividad utiliza esta imagen.");
       if (referenced || block) throw new AppError(409, "MEDIA_IN_USE", "El archivo está asociado a vocabulario o a una lección.");
 
       const updated = await transaction.mediaFile.update({
