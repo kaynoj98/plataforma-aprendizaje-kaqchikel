@@ -7,6 +7,10 @@
     "node": ">=20.9.0"
   },
   "scripts": {
+    "e2e": "node e2e/run.cjs",
+    "e2e:install": "node e2e/install.cjs",
+    "e2e:report": "node e2e/report.cjs",
+    "lint": "pnpm --filter @kaqchikel/web lint && node apps/web/node_modules/eslint/bin/eslint.js --config e2e/eslint.config.cjs e2e",
     "dev": "pnpm --parallel --filter @kaqchikel/web --filter @kaqchikel/api run dev",
     "dev:web": "pnpm --filter @kaqchikel/web run dev",
     "dev:api": "pnpm --filter @kaqchikel/api run dev",

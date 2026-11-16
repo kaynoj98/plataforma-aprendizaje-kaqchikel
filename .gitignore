@@ -27,6 +27,10 @@ apps/api/generated/
 tmp/
 temp/
 .cache/
+.e2e/
+playwright-report/
+test-results/
+playwright/.auth/
 
 # Almacenamiento y respaldos
 storage/
