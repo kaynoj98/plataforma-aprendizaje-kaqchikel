@@ -590,6 +590,7 @@ enum ActivityType {
   AUDIO_RECOGNITION
   MATCHING
   WRITING
+  SENTENCE_ORDERING
 }
 
 model Activity {
@@ -629,6 +630,9 @@ model ActivityQuestion {
   correctPosition Int @map("correct_position")
   vocabularyId String? @map("vocabulary_id") @db.Uuid
   vocabulary VocabularyItem? @relation(fields:[vocabularyId], references:[id], onDelete:Restrict)
+  sentenceText String? @map("sentence_text")
+  alternativeOrders Json? @map("alternative_orders")
+  orderingSubmissions ActivityOrderingSubmission[]
   variantSnapshot String? @map("variant_snapshot")
   writingSubmissions ActivityWritingSubmission[]
   termSnapshot String? @map("term_snapshot")
@@ -670,11 +674,27 @@ model ActivityAttempt {
   completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
   answers ActivityAnswer[]
   writingSubmissions ActivityWritingSubmission[]
+  orderingSubmissions ActivityOrderingSubmission[]
   matches ActivityMatchingSubmission[]
   @@unique([userId,requestId])
   @@unique([id,versionId])
   @@index([userId,versionId])
   @@map("activity_attempts")
+}
+
+model ActivityOrderingSubmission {
+  attemptId String @map("attempt_id") @db.Uuid
+  versionId String @map("version_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  segmentIds String[] @map("segment_ids") @db.Uuid
+  correct Boolean
+  answeredAt DateTime @default(now()) @map("answered_at") @db.Timestamptz(3)
+  attempt ActivityAttempt @relation(fields:[attemptId,versionId],references:[id,versionId],onDelete:Restrict)
+  question ActivityQuestion @relation(fields:[questionId,versionId],references:[id,versionId],onDelete:Restrict)
+  @@id([attemptId,questionId])
+  @@unique([attemptId,requestId])
+  @@map("activity_ordering_submissions")
 }
 
 model ActivityWritingSubmission {

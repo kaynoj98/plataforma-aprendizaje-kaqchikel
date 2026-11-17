@@ -13,6 +13,7 @@ import {
 import { MediaLibrary } from "@/components/academics/media-library";
 import { MediaUpload } from "@/components/vocabulary/media-upload";
 import { MatchingPractice } from "./matching-practice";
+import { OrderingEditor } from "./ordering-editor";
 import { Practice } from "./practice";
 
 const field = "mt-1 block w-full min-w-0 rounded-lg border bg-background p-2";
@@ -245,6 +246,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
   const [selected, setSelected] = useState<Document & { id: string }>();
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const hasPending = draft?.questions.some((q) => pending[q.editorKey!]);
+  const ordering = draft?.type === "SENTENCE_ORDERING";
   const writing = draft?.type === "WRITING";
   const audio = draft?.type === "AUDIO_RECOGNITION";
   const kind = audio ? "audio" : "image";
@@ -340,11 +342,15 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
           imageDescription,
           audioMediaId,
           audioTranscript,
+          sentenceText,
+          alternativeOrders,
         }) => ({
           imageMediaId,
           imageDescription,
           audioMediaId,
           audioTranscript,
+          sentenceText,
+          alternativeOrders,
           prompt,
           feedback,
           vocabularyId,
@@ -394,6 +400,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               "AUDIO_RECOGNITION",
               "MATCHING",
               "WRITING",
+              "SENTENCE_ORDERING",
             ] as const
           ).map((type) => (
             <Button
@@ -418,15 +425,17 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 );
               }}
             >
-              {type === "WRITING"
-                ? "Crear práctica de escritura"
-                : type === "MATCHING"
-                  ? "Crear relación de palabras"
-                  : type === "AUDIO_RECOGNITION"
-                    ? "Crear comprensión auditiva"
-                    : type === "IMAGE_RECOGNITION"
-                      ? "Crear reconocimiento visual"
-                      : "Crear selección múltiple"}
+              {type === "SENTENCE_ORDERING"
+                ? "Crear ordenamiento de oraciones"
+                : type === "WRITING"
+                  ? "Crear práctica de escritura"
+                  : type === "MATCHING"
+                    ? "Crear relación de palabras"
+                    : type === "AUDIO_RECOGNITION"
+                      ? "Crear comprensión auditiva"
+                      : type === "IMAGE_RECOGNITION"
+                        ? "Crear reconocimiento visual"
+                        : "Crear selección múltiple"}
             </Button>
           ))}
           <Button
@@ -545,7 +554,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               >
                 <legend>Pregunta {i + 1}</legend>
                 <label>
-                  {writing ? "Indicación en español" : "Enunciado"}
+                  {writing || ordering ? "Indicación en español" : "Enunciado"}
                   <textarea
                     required
                     className={field}
@@ -556,203 +565,220 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                     }
                   />
                 </label>
-                {q.vocabularyId && (
-                  <p>
-                    Término vinculado · {q.term}
-                    {writing && q.variantSnapshot
-                      ? " · " + q.variantSnapshot
-                      : ""}{" "}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() =>
-                        change(i, {
-                          ...q,
-                          vocabularyId: null,
-                          term: null,
-                          variantSnapshot: null,
-                        })
-                      }
-                    >
-                      Quitar vínculo
-                    </Button>
-                  </p>
-                )}
-                <WordPicker
-                  kind={kind}
-                  onMedia={
-                    audio || draft.type === "IMAGE_RECOGNITION"
-                      ? (vocabularyId, term, id) =>
-                          change(i, {
-                            ...q,
-                            vocabularyId,
-                            term,
-                            [mediaField]: id,
-                          })
-                      : undefined
-                  }
-                  onPick={(vocabularyId, term, translation, variantSnapshot) =>
-                    change(i, {
-                      ...q,
-                      vocabularyId,
-                      term,
-                      ...(writing
-                        ? {
-                            variantSnapshot,
-                            prompt: q.prompt || translation,
-                            options: [
-                              { label: term, correct: true },
-                              ...q.options.slice(1),
-                            ],
-                          }
-                        : {}),
-                    })
-                  }
-                />
-                {(audio || draft.type === "IMAGE_RECOGNITION") && (
+                {ordering ? (
+                  <OrderingEditor q={q} change={(value) => change(i, value)} />
+                ) : (
                   <>
-                    <MediaUpload
-                      activity
-                      kind={kind}
-                      mediaId={q[mediaField] ?? undefined}
-                      disabled={busy}
-                      onUploaded={(id) => selectMedia(q.editorKey!, id)}
-                      onPending={(value) =>
-                        setPending((prev) => ({
-                          ...prev,
-                          [q.editorKey!]: value,
-                        }))
-                      }
-                    />
-                    <MediaLibrary
-                      kind={kind}
-                      disabled={busy || !!pending[q.editorKey!]}
-                      onSelect={(id) => selectMedia(q.editorKey!, id)}
-                    />
-                    <label className="block">
-                      {audio
-                        ? "Transcripción de la grabación"
-                        : "Pista descriptiva accesible"}
-                      <textarea
-                        required
-                        maxLength={audio ? 3000 : 500}
-                        className={field}
-                        value={
-                          (audio ? q.audioTranscript : q.imageDescription) ?? ""
-                        }
-                        onChange={(e) =>
-                          change(i, {
-                            ...q,
-                            [audio ? "audioTranscript" : "imageDescription"]:
-                              e.target.value,
-                          })
-                        }
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {audio
-                          ? "Usa una grabación de hasta cinco minutos. El estudiante podrá leer la transcripción después de responder."
-                          : "Describe rasgos que permitan elegir una opción sin nombrar la solución."}
-                      </span>
-                    </label>
-                  </>
-                )}
-                {q.options.map((o, j) => (
-                  <div
-                    key={j}
-                    className="grid items-end gap-2 sm:grid-cols-[1fr_auto_auto]"
-                  >
-                    <label>
-                      {writing
-                        ? j === 0
-                          ? "Respuesta principal en Kaqchikel"
-                          : "Alternativa autorizada " + j
-                        : "Opción " + (j + 1)}
-                      <input
-                        required
-                        className={field}
-                        value={o.label}
-                        maxLength={500}
-                        onChange={(e) =>
-                          change(i, {
-                            ...q,
-                            options: q.options.map((v, n) =>
-                              n === j ? { ...v, label: e.target.value } : v,
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    {!writing && (
-                      <label className="p-2">
-                        <input
-                          type="radio"
-                          name={"correct-" + i}
-                          checked={o.correct}
-                          onChange={() =>
+                    {q.vocabularyId && (
+                      <p>
+                        Término vinculado · {q.term}
+                        {writing && q.variantSnapshot
+                          ? " · " + q.variantSnapshot
+                          : ""}{" "}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
                             change(i, {
                               ...q,
-                              options: q.options.map((v, n) => ({
-                                ...v,
-                                correct: n === j,
-                              })),
+                              vocabularyId: null,
+                              term: null,
+                              variantSnapshot: null,
                             })
                           }
-                        />{" "}
-                        Correcta
-                      </label>
+                        >
+                          Quitar vínculo
+                        </Button>
+                      </p>
                     )}
+                    <WordPicker
+                      kind={kind}
+                      onMedia={
+                        audio || draft.type === "IMAGE_RECOGNITION"
+                          ? (vocabularyId, term, id) =>
+                              change(i, {
+                                ...q,
+                                vocabularyId,
+                                term,
+                                [mediaField]: id,
+                              })
+                          : undefined
+                      }
+                      onPick={(
+                        vocabularyId,
+                        term,
+                        translation,
+                        variantSnapshot,
+                      ) =>
+                        change(i, {
+                          ...q,
+                          vocabularyId,
+                          term,
+                          ...(writing
+                            ? {
+                                variantSnapshot,
+                                prompt: q.prompt || translation,
+                                options: [
+                                  { label: term, correct: true },
+                                  ...q.options.slice(1),
+                                ],
+                              }
+                            : {}),
+                        })
+                      }
+                    />
+                    {(audio || draft.type === "IMAGE_RECOGNITION") && (
+                      <>
+                        <MediaUpload
+                          activity
+                          kind={kind}
+                          mediaId={q[mediaField] ?? undefined}
+                          disabled={busy}
+                          onUploaded={(id) => selectMedia(q.editorKey!, id)}
+                          onPending={(value) =>
+                            setPending((prev) => ({
+                              ...prev,
+                              [q.editorKey!]: value,
+                            }))
+                          }
+                        />
+                        <MediaLibrary
+                          kind={kind}
+                          disabled={busy || !!pending[q.editorKey!]}
+                          onSelect={(id) => selectMedia(q.editorKey!, id)}
+                        />
+                        <label className="block">
+                          {audio
+                            ? "Transcripción de la grabación"
+                            : "Pista descriptiva accesible"}
+                          <textarea
+                            required
+                            maxLength={audio ? 3000 : 500}
+                            className={field}
+                            value={
+                              (audio
+                                ? q.audioTranscript
+                                : q.imageDescription) ?? ""
+                            }
+                            onChange={(e) =>
+                              change(i, {
+                                ...q,
+                                [audio
+                                  ? "audioTranscript"
+                                  : "imageDescription"]: e.target.value,
+                              })
+                            }
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {audio
+                              ? "Usa una grabación de hasta cinco minutos. El estudiante podrá leer la transcripción después de responder."
+                              : "Describe rasgos que permitan elegir una opción sin nombrar la solución."}
+                          </span>
+                        </label>
+                      </>
+                    )}
+                    {q.options.map((o, j) => (
+                      <div
+                        key={j}
+                        className="grid items-end gap-2 sm:grid-cols-[1fr_auto_auto]"
+                      >
+                        <label>
+                          {writing
+                            ? j === 0
+                              ? "Respuesta principal en Kaqchikel"
+                              : "Alternativa autorizada " + j
+                            : "Opción " + (j + 1)}
+                          <input
+                            required
+                            className={field}
+                            value={o.label}
+                            maxLength={500}
+                            onChange={(e) =>
+                              change(i, {
+                                ...q,
+                                options: q.options.map((v, n) =>
+                                  n === j ? { ...v, label: e.target.value } : v,
+                                ),
+                              })
+                            }
+                          />
+                        </label>
+                        {!writing && (
+                          <label className="p-2">
+                            <input
+                              type="radio"
+                              name={"correct-" + i}
+                              checked={o.correct}
+                              onChange={() =>
+                                change(i, {
+                                  ...q,
+                                  options: q.options.map((v, n) => ({
+                                    ...v,
+                                    correct: n === j,
+                                  })),
+                                })
+                              }
+                            />{" "}
+                            Correcta
+                          </label>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={writing ? j === 0 : q.options.length <= 2}
+                          onClick={() =>
+                            change(i, {
+                              ...q,
+                              options: q.options.filter((_, n) => n !== j),
+                            })
+                          }
+                        >
+                          {writing
+                            ? "Quitar alternativa"
+                            : "Quitar opción " + (j + 1)}
+                        </Button>
+                        {!writing && (
+                          <div className="flex flex-wrap gap-2 sm:col-span-full">
+                            {[-1, 1].map((delta) => (
+                              <Button
+                                key={delta}
+                                type="button"
+                                variant="outline"
+                                disabled={!q.options[j + delta]}
+                                onClick={() =>
+                                  change(i, {
+                                    ...q,
+                                    options: swap(q.options, j, j + delta),
+                                  })
+                                }
+                              >
+                                {delta < 0 ? "Subir" : "Bajar"} opción {j + 1}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                     <Button
                       type="button"
-                      variant="ghost"
-                      disabled={writing ? j === 0 : q.options.length <= 2}
+                      variant="outline"
+                      disabled={q.options.length >= 10}
                       onClick={() =>
                         change(i, {
                           ...q,
-                          options: q.options.filter((_, n) => n !== j),
+                          options: [
+                            ...q.options,
+                            { label: "", correct: writing },
+                          ],
                         })
                       }
                     >
                       {writing
-                        ? "Quitar alternativa"
-                        : "Quitar opción " + (j + 1)}
+                        ? "Agregar alternativa autorizada"
+                        : "Agregar opción"}
                     </Button>
-                    {!writing && (
-                      <div className="flex flex-wrap gap-2 sm:col-span-full">
-                        {[-1, 1].map((delta) => (
-                          <Button
-                            key={delta}
-                            type="button"
-                            variant="outline"
-                            disabled={!q.options[j + delta]}
-                            onClick={() =>
-                              change(i, {
-                                ...q,
-                                options: swap(q.options, j, j + delta),
-                              })
-                            }
-                          >
-                            {delta < 0 ? "Subir" : "Bajar"} opción {j + 1}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={q.options.length >= 10}
-                  onClick={() =>
-                    change(i, {
-                      ...q,
-                      options: [...q.options, { label: "", correct: writing }],
-                    })
-                  }
-                >
-                  {writing
-                    ? "Agregar alternativa autorizada"
-                    : "Agregar opción"}
-                </Button>
+                  </>
+                )}
                 <label className="block">
                   Retroalimentación opcional
                   <textarea

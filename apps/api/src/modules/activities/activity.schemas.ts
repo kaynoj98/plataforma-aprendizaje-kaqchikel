@@ -1,3 +1,4 @@
+import { isPermutation, matchesSentence } from "./ordering.js";
 import { z } from "zod";
 
 export const writingKey = (text: string) => text.normalize("NFC").trim();
@@ -16,6 +17,16 @@ export const writtenChoice = z
       ),
   })
   .strict();
+export const orderedChoice = z
+  .object({
+    questionId: z.uuid(),
+    requestId: z.uuid(),
+    segmentKeys: z
+      .array(z.string().regex(/^[a-f0-9]{64}$/))
+      .min(2)
+      .max(32),
+  })
+  .strict();
 const option = z
   .object({ label: z.string().trim().min(1).max(500), correct: z.boolean() })
   .strict();
@@ -28,17 +39,14 @@ const question = z
     imageMediaId: z.uuid().nullish(),
     imageDescription: z.string().trim().min(1).max(500).nullish(),
     vocabularyId: z.uuid().nullable().default(null),
-    options: z.array(option).min(1).max(10),
+    sentenceText: z.string().trim().min(1).max(3000).optional(),
+    alternativeOrders: z
+      .array(z.array(z.number().int().nonnegative()).max(32))
+      .max(16)
+      .optional(),
+    options: z.array(option).min(1).max(32),
   })
-  .strict()
-  .superRefine(({ options }, ctx) => {
-    if (new Set(options.map((o) => o.label)).size !== options.length)
-      ctx.addIssue({
-        code: "custom",
-        path: ["options"],
-        message: "Las opciones de una pregunta deben ser distintas.",
-      });
-  });
+  .strict();
 
 const pair = z
   .object({
@@ -64,6 +72,7 @@ export const definition = z
         "AUDIO_RECOGNITION",
         "MATCHING",
         "WRITING",
+        "SENTENCE_ORDERING",
       ])
       .default("MULTIPLE_CHOICE"),
     title: z.string().trim().min(1).max(200),
@@ -102,13 +111,51 @@ export const definition = z
         message: "Selecciona preguntas para esta modalidad.",
       });
     for (const [i, q] of questions.entries()) {
+      const ordering = type === "SENTENCE_ORDERING";
+      if (ordering) {
+        const labels = q.options.map((o) => o.label);
+        if (
+          !q.sentenceText ||
+          !storable(q.sentenceText) ||
+          labels.length < 2 ||
+          !matchesSentence(q.sentenceText, labels) ||
+          q.vocabularyId
+        )
+          ctx.addIssue({
+            code: "custom",
+            path: ["questions", i],
+            message:
+              "Los segmentos en orden principal deben reproducir la oración indicada.",
+          });
+        for (const order of q.alternativeOrders ?? [])
+          if (!isPermutation(order, labels.length))
+            ctx.addIssue({
+              code: "custom",
+              path: ["questions", i, "alternativeOrders"],
+              message:
+                "Cada alternativa debe utilizar todos los segmentos una sola vez.",
+            });
+      } else if (
+        q.sentenceText !== undefined ||
+        q.alternativeOrders !== undefined ||
+        q.options.length > 10 ||
+        new Set(q.options.map((o) => o.label)).size !== q.options.length
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["questions", i],
+          message:
+            "Revisa las opciones de esta modalidad. Deben ser distintas y no superar diez.",
+        });
+      }
       const valid =
-        type === "WRITING"
+        ordering ||
+        (type === "WRITING"
           ? q.options.every((o) => o.correct && storable(o.label)) &&
             new Set(q.options.map((o) => writingKey(o.label))).size ===
               q.options.length
           : q.options.length >= 2 &&
-            q.options.filter((o) => o.correct).length === 1;
+            q.options.filter((o) => o.correct).length === 1);
       if (!valid)
         ctx.addIssue({
           code: "custom",

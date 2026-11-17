@@ -9,6 +9,8 @@ export type Summary = {
   revision: number;
 };
 export type Question = {
+  sentenceText?: string;
+  alternativeOrders?: number[][];
   variantSnapshot?: string | null;
   audioMediaId?: string | null;
   audioTranscript?: string | null;
@@ -36,7 +38,8 @@ export type Definition = {
     | "IMAGE_RECOGNITION"
     | "AUDIO_RECOGNITION"
     | "MATCHING"
-    | "WRITING";
+    | "WRITING"
+    | "SENTENCE_ORDERING";
   title: string;
   instructions: string;
   questions: Question[];

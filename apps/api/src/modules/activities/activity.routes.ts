@@ -7,6 +7,7 @@ import { validateParams } from "../../middlewares/validate-params.js";
 import {
   choice,
   writtenChoice,
+  orderedChoice,
   createActivity,
   matchChoice,
   matchSubmission,
@@ -96,7 +97,7 @@ activityRouter.post(
 const previewBody = z
   .object({
     versionId: z.uuid().optional(),
-    choices: z.array(z.union([choice, writtenChoice])).max(50),
+    choices: z.array(z.union([choice, writtenChoice, orderedChoice])).max(50),
   })
   .strict();
 activityRouter.get(
@@ -181,7 +182,7 @@ activityRouter.post(
 activityRouter.post(
   "/activity-attempts/:id/answers",
   ...student,
-  validateBody(z.union([choice, writtenChoice])),
+  validateBody(z.union([choice, writtenChoice, orderedChoice])),
   async (req, res) => {
     res.json({
       data: await service.answer(

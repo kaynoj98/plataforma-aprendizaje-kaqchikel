@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleX, ListChecks } from "lucide-react";
 import Link from "next/link";
+import { SegmentPicker } from "./segment-picker";
 import { WritingInput } from "./writing-input";
 import { MatchingPractice } from "./matching-practice";
 import { StoredPreview } from "@/components/vocabulary/media-preview";
@@ -22,6 +23,7 @@ type State = {
     hasAudio?: boolean;
     imageDescription?: string;
     writing?: boolean;
+    segments?: { key: string; label: string }[];
     options?: { id: string; label: string }[];
   } | null;
   result: {
@@ -32,13 +34,17 @@ type State = {
   } | null;
 };
 type Written = { questionId: string; responseText: string; requestId: string };
-type Choice = { questionId: string; optionId: string } | Written;
+type Choice =
+  | { questionId: string; optionId: string }
+  | Written
+  | { questionId: string; requestId: string; segmentKeys: string[] };
 type Reply = {
   state: State;
   feedback: {
     correct: boolean;
     feedback: string;
     audioTranscript?: string;
+    sentenceText?: string;
     accepted?: string[];
     acceptedAlternative?: boolean;
   } | null;
@@ -53,6 +59,12 @@ export function Practice({
   const [state, setState] = useState<State>();
   const [reply, setReply] = useState<Reply>();
   const [selected, select] = useState("");
+  const [order, setOrder] = useState<string[]>([]);
+  const pendingOrder = useRef<{
+    questionId: string;
+    requestId: string;
+    segmentKeys: string[];
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
@@ -90,6 +102,8 @@ export function Practice({
             requestId: request.current,
           });
       request.current = "";
+      setOrder([]);
+      pendingOrder.current = null;
       history.current = [];
       pendingWriting.current = null;
       setState(next);
@@ -98,10 +112,26 @@ export function Practice({
     });
   }
   function submit() {
-    if (!state?.question || !selected || reply) return;
+    if (
+      !state?.question ||
+      reply ||
+      (state.question.segments
+        ? order.length !== state.question.segments.length
+        : !selected)
+    )
+      return;
     let choice: Choice;
     const questionId = state.question.id;
-    if (state.question.writing) {
+    if (state.question.segments) {
+      const prior = pendingOrder.current;
+      choice =
+        prior?.questionId === questionId &&
+        prior.segmentKeys.length === order.length &&
+        prior.segmentKeys.every((k, i) => k === order[i])
+          ? prior
+          : { questionId, requestId: crypto.randomUUID(), segmentKeys: order };
+      pendingOrder.current = choice;
+    } else if (state.question.writing) {
       const prior = pendingWriting.current;
       choice =
         prior?.questionId === questionId && prior.responseText === selected
@@ -127,6 +157,7 @@ export function Practice({
           );
       if (preview) history.current = choices;
       pendingWriting.current = null;
+      pendingOrder.current = null;
       setReply(next);
     });
   }
@@ -215,7 +246,13 @@ export function Practice({
                   {state.question.term && (
                     <p lang="cak">{state.question.term}</p>
                   )}
-                  {state.question.writing ? (
+                  {state.question.segments ? (
+                    <SegmentPicker
+                      segments={state.question.segments}
+                      order={order}
+                      onChange={setOrder}
+                    />
+                  ) : state.question.writing ? (
                     <WritingInput value={selected} onChange={select} />
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -256,6 +293,17 @@ export function Practice({
                           </>
                         )}
                       </p>
+                      {reply.feedback?.sentenceText && (
+                        <p>
+                          Oración principal:{" "}
+                          <span
+                            className="whitespace-pre-wrap break-words"
+                            lang="cak"
+                          >
+                            {reply.feedback.sentenceText}
+                          </span>
+                        </p>
+                      )}
                       {reply.feedback?.acceptedAlternative && (
                         <p>Coincide con una alternativa autorizada.</p>
                       )}
@@ -307,6 +355,7 @@ export function Practice({
                       onClick={() => {
                         setState(reply.state);
                         setReply(undefined);
+                        setOrder([]);
                         select("");
                       }}
                     >
@@ -316,7 +365,15 @@ export function Practice({
                     </Button>
                   </>
                 ) : (
-                  <Button disabled={!selected.trim() || busy} onClick={submit}>
+                  <Button
+                    disabled={
+                      busy ||
+                      (state.question.segments
+                        ? order.length !== state.question.segments.length
+                        : !selected.trim())
+                    }
+                    onClick={submit}
+                  >
                     Comprobar respuesta
                   </Button>
                 )}

@@ -1,3 +1,10 @@
+import {
+  correctOrder,
+  decodeOrder,
+  segmentKey,
+  shuffledSegments,
+  type OrderedChoice,
+} from "./ordering.js";
 import { previewBoard, recordMatch, resumeBoard } from "./matching.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../errors/app-error.js";
@@ -22,7 +29,10 @@ import {
 
 type Tx = Prisma.TransactionClient;
 type Written = { questionId: string; requestId: string; responseText: string };
-type Choice = { questionId: string; optionId: string } | Written;
+type Choice =
+  | { questionId: string; optionId: string }
+  | Written
+  | OrderedChoice;
 const published = { status: "PUBLISHED", deletedAt: null } as const;
 const publicLesson = {
   ...published,
@@ -253,7 +263,12 @@ async function writeVersion(
                   ? words.find((w) => w.id === q.vocabularyId)?.variant?.name
                   : null,
               termSnapshot: q.vocabularyId ? terms.get(q.vocabularyId) : null,
-              correctPosition: q.options.findIndex((o) => o.correct),
+              sentenceText: q.sentenceText,
+              alternativeOrders: q.alternativeOrders,
+              correctPosition:
+                draft.type === "SENTENCE_ORDERING"
+                  ? -1
+                  : q.options.findIndex((o) => o.correct),
               options: {
                 create: q.options.map((o, i) => ({
                   position: i,
@@ -364,6 +379,12 @@ export async function readAdmin(id: string) {
         feedback: q.feedback,
         vocabularyId: q.vocabularyId,
         term: q.termSnapshot,
+        ...(activity.type === "SENTENCE_ORDERING"
+          ? {
+              sentenceText: q.sentenceText,
+              alternativeOrders: q.alternativeOrders ?? [],
+            }
+          : {}),
         ...(activity.type === "WRITING"
           ? { variantSnapshot: q.variantSnapshot }
           : {}),
@@ -380,9 +401,18 @@ export async function readAdmin(id: string) {
     },
   };
 }
-function evaluate(v: Version, index: number, choice: Choice) {
+function evaluate(v: Version, index: number, choice: Choice, seed = v.id) {
   const q = v.questions[index];
   if (!q || q.id !== choice.questionId) conflict();
+  if (v.activity.type === "SENTENCE_ORDERING") {
+    if (!("segmentKeys" in choice)) conflict();
+    const order = decodeOrder(q.options, seed, choice.segmentKeys);
+    return {
+      correct: correctOrder(q.options, q.alternativeOrders, order),
+      feedback: q.feedback,
+      sentenceText: q.sentenceText,
+    };
+  }
   if (v.activity.type === "WRITING" && "responseText" in choice) {
     const accepted = q.options.map((o) => o.label);
     const submitted = writingKey(choice.responseText);
@@ -422,18 +452,24 @@ function view(
     total: v.questions.length,
     answered: answers.length,
     question: q
-      ? v.activity.type === "WRITING"
-        ? { id: q.id, prompt: q.prompt, writing: true }
-        : {
+      ? v.activity.type === "SENTENCE_ORDERING"
+        ? {
             id: q.id,
             prompt: q.prompt,
-            ...(q.audioMediaId
-              ? { hasAudio: true }
-              : q.imageMediaId
-                ? { imageDescription: q.imageDescription }
-                : { term: q.termSnapshot }),
-            options: q.options.map(({ id, label }) => ({ id, label })),
+            segments: shuffledSegments(q.options, attemptId ?? v.id),
           }
+        : v.activity.type === "WRITING"
+          ? { id: q.id, prompt: q.prompt, writing: true }
+          : {
+              id: q.id,
+              prompt: q.prompt,
+              ...(q.audioMediaId
+                ? { hasAudio: true }
+                : q.imageMediaId
+                  ? { imageDescription: q.imageDescription }
+                  : { term: q.termSnapshot }),
+              options: q.options.map(({ id, label }) => ({ id, label })),
+            }
       : null,
     result: q
       ? null
@@ -536,6 +572,7 @@ export async function match(
   });
 }
 const attemptData = {
+  orderingSubmissions: { orderBy: { question: { position: "asc" } } },
   writingSubmissions: { orderBy: { question: { position: "asc" } } },
   version: { include: content },
   answers: { orderBy: { question: { position: "asc" } } },
@@ -567,9 +604,11 @@ export async function begin(id: string, userId: string, requestId: string) {
       };
     return view(
       attempt.version,
-      attempt.version.activity.type === "WRITING"
-        ? attempt.writingSubmissions
-        : attempt.answers,
+      attempt.version.activity.type === "SENTENCE_ORDERING"
+        ? attempt.orderingSubmissions
+        : attempt.version.activity.type === "WRITING"
+          ? attempt.writingSubmissions
+          : attempt.answers,
       attempt.id,
     );
   });
@@ -587,43 +626,70 @@ export async function answer(
     });
     if (!attempt) missing();
     const { version, answers } = attempt;
-    if (version.activity.type === "WRITING") {
-      if (!("responseText" in selected)) conflict();
-      const rows = attempt.writingSubmissions;
+    const ordering = version.activity.type === "SENTENCE_ORDERING";
+    if (ordering || version.activity.type === "WRITING") {
+      const orderedResponse = "segmentKeys" in selected;
+      if (!("requestId" in selected) || ordering !== orderedResponse)
+        conflict();
+      const rows = ordering
+        ? attempt.orderingSubmissions
+        : attempt.writingSubmissions;
       const previous = rows.findIndex(
         (r) => r.requestId === selected.requestId,
       );
       if (previous >= 0) {
         const r = rows[previous]!;
         if (
-          r.responseText !== selected.responseText ||
+          ("responseText" in r &&
+            "responseText" in selected &&
+            r.responseText !== selected.responseText) ||
+          ("segmentIds" in r &&
+            "segmentKeys" in selected &&
+            (r.segmentIds.length !== selected.segmentKeys.length ||
+              r.segmentIds.some(
+                (id, i) =>
+                  segmentKey(attemptId, id) !== selected.segmentKeys[i],
+              ))) ||
           r.questionId !== selected.questionId
         )
           conflict();
         return {
           state: view(version, rows.slice(0, previous + 1), attemptId),
           feedback: {
-            ...evaluate(version, previous, selected),
+            ...evaluate(version, previous, selected, attemptId),
             correct: r.correct,
           },
         };
       }
-      const feedback = evaluate(version, rows.length, selected);
-      const row = await tx.activityWritingSubmission.create({
-        data: {
+      const feedback = evaluate(version, rows.length, selected, attemptId);
+      const data = {
+        attemptId,
+        versionId: version.id,
+        questionId: selected.questionId,
+        requestId: selected.requestId,
+        correct: feedback.correct,
+      };
+      if ("segmentKeys" in selected) {
+        const segments = version.questions[rows.length]!.options;
+        const segmentIds = decodeOrder(
+          segments,
           attemptId,
-          versionId: version.id,
-          ...selected,
-          correct: feedback.correct,
-        },
-      });
-      rows.push(row);
-      if (rows.length === version.questions.length)
+          selected.segmentKeys,
+        ).map((i) => segments[i]!.id);
+        await tx.activityOrderingSubmission.create({
+          data: { ...data, segmentIds },
+        });
+      } else
+        await tx.activityWritingSubmission.create({
+          data: { ...data, responseText: selected.responseText },
+        });
+      const updated = [...rows, feedback];
+      if (updated.length === version.questions.length)
         await tx.activityAttempt.update({
           where: { id: attemptId },
           data: { completedAt: new Date() },
         });
-      return { state: view(version, rows, attemptId), feedback };
+      return { state: view(version, updated, attemptId), feedback };
     }
     if (!("optionId" in selected)) conflict();
     const previous = answers.findIndex(
