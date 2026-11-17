@@ -30,17 +30,66 @@ const question = z
       });
   });
 
+const pair = z
+  .object({
+    term: z.string().trim().min(1).max(200),
+    translation: z.string().trim().min(1).max(255),
+    feedback: z.string().trim().max(2000).default(""),
+    vocabularyId: z.uuid().nullable().default(null),
+  })
+  .strict();
+export const matchChoice = z
+  .object({
+    termKey: z.string().regex(/^[a-f0-9]{64}$/),
+    translationKey: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+export const matchSubmission = matchChoice.extend({ requestId: z.uuid() });
 export const definition = z
   .object({
     type: z
-      .enum(["MULTIPLE_CHOICE", "IMAGE_RECOGNITION", "AUDIO_RECOGNITION"])
+      .enum([
+        "MULTIPLE_CHOICE",
+        "IMAGE_RECOGNITION",
+        "AUDIO_RECOGNITION",
+        "MATCHING",
+      ])
       .default("MULTIPLE_CHOICE"),
     title: z.string().trim().min(1).max(200),
     instructions: z.string().trim().max(3000),
-    questions: z.array(question).min(1).max(50),
+    questions: z.array(question).max(50).default([]),
+    pairs: z.array(pair).max(8).default([]),
   })
   .strict()
-  .superRefine(({ type, questions }, ctx) => {
+  .superRefine(({ type, questions, pairs }, ctx) => {
+    if (type === "MATCHING") {
+      if (questions.length || pairs.length < 3)
+        ctx.addIssue({
+          code: "custom",
+          path: ["pairs"],
+          message: "Agrega entre 3 y 8 parejas.",
+        });
+      for (const field of ["term", "translation"] as const) {
+        const labels = pairs.map((p) =>
+          p[field]
+            .normalize("NFC")
+            .toLowerCase()
+            .replace(/[’‘ʼ]/gu, "'")
+            .replace(/\s+/gu, " "),
+        );
+        if (new Set(labels).size !== labels.length)
+          ctx.addIssue({
+            code: "custom",
+            path: ["pairs"],
+            message: "Cada término y cada traducción deben ser únicos.",
+          });
+      }
+    } else if (!questions.length || pairs.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["questions"],
+        message: "Selecciona preguntas para esta modalidad.",
+      });
     for (const [i, q] of questions.entries()) {
       const audio = type === "AUDIO_RECOGNITION";
       if (

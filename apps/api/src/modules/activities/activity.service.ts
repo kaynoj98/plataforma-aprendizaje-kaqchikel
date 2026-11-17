@@ -1,3 +1,4 @@
+import { previewBoard, recordMatch, resumeBoard } from "./matching.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../errors/app-error.js";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -23,6 +24,7 @@ const publicLesson = {
 };
 const available = { isVisible: true, lesson: publicLesson };
 const content = {
+  pairs: { orderBy: { position: "asc" } },
   questions: {
     orderBy: { position: "asc" },
     include: { options: { orderBy: { position: "asc" } } },
@@ -65,7 +67,7 @@ export async function listActivities(lessonId: string, admin: boolean) {
         select: {
           title: true,
           instructions: true,
-          _count: { select: { questions: true } },
+          _count: { select: { questions: true, pairs: true } },
         },
       },
     },
@@ -74,7 +76,7 @@ export async function listActivities(lessonId: string, admin: boolean) {
     ...row,
     title: versions[0]!.title,
     instructions: versions[0]!.instructions,
-    total: versions[0]!._count.questions,
+    total: versions[0]!._count.questions + versions[0]!._count.pairs,
   }));
 }
 
@@ -142,12 +144,19 @@ async function writeVersion(
 ) {
   const ids = [
     ...new Set(
-      draft.questions.flatMap((q) => (q.vocabularyId ? [q.vocabularyId] : [])),
+      [...draft.questions, ...draft.pairs].flatMap((q) =>
+        q.vocabularyId ? [q.vocabularyId] : [],
+      ),
     ),
   ];
   const words = await tx.vocabularyItem.findMany({
     where: { id: { in: ids }, isActive: true },
-    select: { id: true, termKaqchikel: true, translationSpanish: true },
+    select: {
+      id: true,
+      termKaqchikel: true,
+      translationSpanish: true,
+      variant: { select: { name: true } },
+    },
   });
   if (words.length !== ids.length)
     throw new AppError(
@@ -209,23 +218,39 @@ async function writeVersion(
       number,
       title: draft.title,
       instructions: draft.instructions,
-      questions: {
-        create: draft.questions.map((q, position) => ({
-          audioMediaId: q.audioMediaId,
-          audioTranscript: q.audioTranscript,
-          imageMediaId: q.imageMediaId,
-          imageDescription: q.imageDescription,
-          prompt: q.prompt,
-          feedback: q.feedback,
-          position,
-          vocabularyId: q.vocabularyId,
-          termSnapshot: q.vocabularyId ? terms.get(q.vocabularyId) : null,
-          correctPosition: q.options.findIndex((o) => o.correct),
-          options: {
-            create: q.options.map((o, i) => ({ position: i, label: o.label })),
+      pairs: !draft.pairs.length
+        ? undefined
+        : {
+            create: draft.pairs.map((p, position) => ({
+              ...p,
+              position,
+              variant:
+                words.find((w) => w.id === p.vocabularyId)?.variant?.name ??
+                null,
+            })),
           },
-        })),
-      },
+      questions: !draft.questions.length
+        ? undefined
+        : {
+            create: draft.questions.map((q, position) => ({
+              audioMediaId: q.audioMediaId,
+              audioTranscript: q.audioTranscript,
+              imageMediaId: q.imageMediaId,
+              imageDescription: q.imageDescription,
+              prompt: q.prompt,
+              feedback: q.feedback,
+              position,
+              vocabularyId: q.vocabularyId,
+              termSnapshot: q.vocabularyId ? terms.get(q.vocabularyId) : null,
+              correctPosition: q.options.findIndex((o) => o.correct),
+              options: {
+                create: q.options.map((o, i) => ({
+                  position: i,
+                  label: o.label,
+                })),
+              },
+            })),
+          },
     },
     select: { id: true },
   });
@@ -310,6 +335,19 @@ export async function readAdmin(id: string) {
       type: activity.type,
       title: version.title,
       instructions: version.instructions,
+      ...(activity.type === "MATCHING"
+        ? {
+            pairs: version.pairs.map(
+              ({ term, translation, variant, vocabularyId, feedback }) => ({
+                term,
+                translation,
+                variant,
+                vocabularyId,
+                feedback,
+              }),
+            ),
+          }
+        : {}),
       questions: version.questions.map((q) => ({
         prompt: q.prompt,
         feedback: q.feedback,
@@ -421,12 +459,52 @@ export async function preview(
   choices: Choice[],
 ) {
   const { version } = await current(prisma, id, true);
-  if (versionId && versionId !== version.id) conflict();
+  if (version.pairs.length || (versionId && versionId !== version.id))
+    conflict();
   const answers = choices.map((answer, i) => evaluate(version, i, answer));
   return {
     state: view(version, answers, null),
     feedback: answers.at(-1) ?? null,
   };
+}
+export async function matchingPreview(
+  id: string,
+  versionId: string | undefined,
+  seed: string,
+  choices: { termKey: string; translationKey: string }[],
+) {
+  const { version } = await current(prisma, id, true);
+  if (!version.pairs.length || (versionId && versionId !== version.id))
+    conflict();
+  return previewBoard(version, seed, choices);
+}
+export async function match(
+  attemptId: string,
+  userId: string,
+  choice: { termKey: string; translationKey: string; requestId: string },
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM activity_attempts WHERE id=${attemptId}::uuid AND user_id=${userId}::uuid FOR UPDATE`;
+    const attempt = await tx.activityAttempt.findFirst({
+      where: {
+        id: attemptId,
+        userId,
+        version: { activity: { ...available, type: "MATCHING" } },
+      },
+      select: {
+        version: {
+          select: {
+            id: true,
+            title: true,
+            instructions: true,
+            pairs: content.pairs,
+          },
+        },
+      },
+    });
+    if (!attempt) missing();
+    return recordMatch(tx, attempt.version, attemptId, choice);
+  });
 }
 const attemptData = {
   version: { include: content },
@@ -452,6 +530,11 @@ export async function begin(id: string, userId: string, requestId: string) {
         data: { userId, requestId, versionId: version.id },
         include: attemptData,
       }));
+    if (attempt.version.pairs.length)
+      return {
+        ...(await resumeBoard(tx, attempt.version, attempt.id)),
+        resumeKey: attempt.requestId,
+      };
     return view(attempt.version, attempt.answers, attempt.id);
   });
 }

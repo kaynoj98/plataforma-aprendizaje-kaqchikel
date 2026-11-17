@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { verifyMatching } from "./matching-activity.fixture.js";
 import { verifyAudioActivity } from "./audio-activity.fixture.js";
 import { verifyVisualActivity } from "./visual-activity.fixture.js";
 import {
@@ -291,6 +292,7 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
           wordId,
           courseId,
         );
+        await verifyMatching(admin!, user!, other!, lessonId, wordId);
         expect(await prisma.lessonProgress.count({ where: { lessonId } })).toBe(
           0,
         );
@@ -308,6 +310,10 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
         }
         const version = { activity: { lessonId } };
         await prisma.$transaction([
+          prisma.activityMatchingSubmission.deleteMany({
+            where: { attempt: { version } },
+          }),
+          prisma.activityMatchingPair.deleteMany({ where: { version } }),
           prisma.activityAnswer.deleteMany({ where: { attempt: { version } } }),
           prisma.activityAttempt.deleteMany({ where: { version } }),
           prisma.activityOption.deleteMany({
@@ -319,6 +325,7 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
           }),
           prisma.activity.deleteMany({ where: { lessonId } }),
           prisma.vocabularyItem.deleteMany({ where: { id: wordId } }),
+          prisma.vocabularyVariant.deleteMany({ where: { id: wordId } }),
           prisma.course.deleteMany({ where: { id: courseId } }),
           prisma.auditLog.deleteMany({ where: { actorUserId: { in: users } } }),
           prisma.mediaFile.deleteMany({ where: { uploadedById: users[0] } }),

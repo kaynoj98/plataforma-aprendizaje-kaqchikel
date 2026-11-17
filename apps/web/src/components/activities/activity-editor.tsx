@@ -6,14 +6,23 @@ import {
   message,
   type Definition,
   type Question,
+  type Pair,
   type Summary,
   type Document,
 } from "./api";
 import { MediaLibrary } from "@/components/academics/media-library";
 import { MediaUpload } from "@/components/vocabulary/media-upload";
+import { MatchingPractice } from "./matching-practice";
 import { Practice } from "./practice";
 
 const field = "mt-1 block w-full min-w-0 rounded-lg border bg-background p-2";
+const blankPair = (): Pair => ({
+  editorKey: crypto.randomUUID(),
+  term: "",
+  translation: "",
+  vocabularyId: null,
+  feedback: "",
+});
 const blankQuestion = (): Question => ({
   editorKey: crypto.randomUUID(),
   prompt: "",
@@ -39,9 +48,14 @@ function WordPicker({
   onMedia,
   kind,
 }: {
-  kind: "audio" | "image";
+  kind?: "audio" | "image";
   onMedia?: (id: string, term: string, mediaId: string) => void;
-  onPick: (id: string, term: string) => void;
+  onPick: (
+    id: string,
+    term: string,
+    translation: string,
+    variant: string | null,
+  ) => void;
 }) {
   const [query, setQuery] = useState("");
   const [words, setWords] = useState<
@@ -98,7 +112,14 @@ function WordPicker({
               type="button"
               variant="outline"
               key={w.id}
-              onClick={() => onPick(w.id, w.termKaqchikel)}
+              onClick={() =>
+                onPick(
+                  w.id,
+                  w.termKaqchikel,
+                  w.translationEs,
+                  w.variant?.name ?? null,
+                )
+              }
             >
               {w.termKaqchikel} · {w.translationEs}
               {w.variant ? " · " + w.variant.name : ""}
@@ -117,6 +138,102 @@ function WordPicker({
         );
       })}
     </details>
+  );
+}
+function PairEditor({
+  pairs,
+  onChange,
+}: {
+  pairs: Pair[];
+  onChange: (pairs: Pair[]) => void;
+}) {
+  function update(i: number, props: Partial<Pair>) {
+    onChange(pairs.map((p, n) => (i === n ? { ...p, ...props } : p)));
+  }
+  return (
+    <div className="space-y-4">
+      {pairs.map((p, i) => (
+        <fieldset className="space-y-2 rounded-lg border p-3" key={p.editorKey}>
+          <legend>Pareja {i + 1}</legend>
+          <WordPicker
+            onPick={(vocabularyId, term, translation, variant) =>
+              update(i, { vocabularyId, term, translation, variant })
+            }
+          />
+          {p.vocabularyId && (
+            <div>
+              Vocabulario vinculado{p.variant ? " · " + p.variant : ""}{" "}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => update(i, { vocabularyId: null, variant: null })}
+              >
+                Quitar vínculo
+              </Button>
+            </div>
+          )}
+          <label className="block">
+            Término en Kaqchikel
+            <input
+              className={field}
+              required
+              maxLength={200}
+              lang="cak"
+              value={p.term}
+              onChange={(e) => update(i, { term: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            Traducción al español
+            <input
+              className={field}
+              required
+              maxLength={255}
+              value={p.translation}
+              onChange={(e) => update(i, { translation: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            Retroalimentación al completar la pareja
+            <textarea
+              className={field}
+              maxLength={2000}
+              value={p.feedback}
+              onChange={(e) => update(i, { feedback: e.target.value })}
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {[-1, 1].map((d) => (
+              <Button
+                type="button"
+                variant="outline"
+                key={d}
+                disabled={!pairs[i + d]}
+                onClick={() => onChange(swap(pairs, i, i + d))}
+              >
+                {d < 0 ? "Subir" : "Bajar"} pareja {i + 1}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pairs.length <= 3}
+              onClick={() => onChange(pairs.filter((_, n) => n !== i))}
+            >
+              Quitar pareja {i + 1}
+            </Button>
+          </div>
+        </fieldset>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pairs.length >= 8}
+        onClick={() => onChange([...pairs, blankPair()])}
+      >
+        Agregar pareja
+      </Button>
+    </div>
   );
 }
 export function ActivityEditor({ lessonId }: { lessonId: string }) {
@@ -187,6 +304,11 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
         ...q,
         editorKey: crypto.randomUUID(),
       }));
+      if (doc.definition.pairs)
+        doc.definition.pairs = doc.definition.pairs.map((p) => ({
+          ...p,
+          editorKey: crypto.randomUUID(),
+        }));
       setDraft(doc.definition);
       setSelected({ ...doc, id: item.id });
       setPosition(doc.position);
@@ -197,6 +319,14 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
     if (!draft || hasPending) return;
     const definition = {
       ...draft,
+      pairs: draft.pairs?.map(
+        ({ term, translation, vocabularyId, feedback }) => ({
+          term,
+          translation,
+          vocabularyId,
+          feedback,
+        }),
+      ),
       questions: draft.questions.map(
         ({
           prompt,
@@ -259,6 +389,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               "MULTIPLE_CHOICE",
               "IMAGE_RECOGNITION",
               "AUDIO_RECOGNITION",
+              "MATCHING",
             ] as const
           ).map((type) => (
             <Button
@@ -270,14 +401,26 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 setPreview("");
                 setPosition((list.at(-1)?.position ?? -1) + 1);
                 creationKey.current = crypto.randomUUID();
-                setDraft({ ...blank(), type });
+                setDraft(
+                  type === "MATCHING"
+                    ? {
+                        title: "",
+                        instructions: "",
+                        questions: [],
+                        pairs: Array.from({ length: 3 }, blankPair),
+                        type,
+                      }
+                    : { ...blank(), type },
+                );
               }}
             >
-              {type === "AUDIO_RECOGNITION"
-                ? "Crear comprensión auditiva"
-                : type === "IMAGE_RECOGNITION"
-                  ? "Crear reconocimiento visual"
-                  : "Crear selección múltiple"}
+              {type === "MATCHING"
+                ? "Crear relación de palabras"
+                : type === "AUDIO_RECOGNITION"
+                  ? "Crear comprensión auditiva"
+                  : type === "IMAGE_RECOGNITION"
+                    ? "Crear reconocimiento visual"
+                    : "Crear selección múltiple"}
             </Button>
           ))}
           <Button
@@ -294,7 +437,8 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               <h3 className="break-words font-semibold">{item.title}</h3>
               <p>
                 {item.isVisible ? "Visible" : "Oculta"} · Posición{" "}
-                {item.position} · {item.total} preguntas
+                {item.position} · {item.total}{" "}
+                {item.type === "MATCHING" ? "parejas" : "preguntas"}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -328,7 +472,12 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                   {item.isVisible ? "Ocultar" : "Mostrar"}
                 </Button>
               </div>
-              {preview === item.id && <Practice id={item.id} preview />}
+              {preview === item.id &&
+                (item.type === "MATCHING" ? (
+                  <MatchingPractice id={item.id} preview />
+                ) : (
+                  <Practice id={item.id} preview />
+                ))}
             </article>
           ))}
         </>
@@ -377,6 +526,12 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 onChange={(e) => setPosition(Number(e.target.value))}
               />
             </label>
+            {draft.type === "MATCHING" && (
+              <PairEditor
+                pairs={draft.pairs ?? []}
+                onChange={(pairs) => setDraft({ ...draft, pairs })}
+              />
+            )}
             {draft.questions.map((q, i) => (
               <fieldset
                 key={q.editorKey}
@@ -602,19 +757,21 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 </div>
               </fieldset>
             ))}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={draft.questions.length >= 50}
-              onClick={() =>
-                setDraft({
-                  ...draft,
-                  questions: [...draft.questions, blankQuestion()],
-                })
-              }
-            >
-              Agregar pregunta
-            </Button>
+            {draft.type !== "MATCHING" && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={draft.questions.length >= 50}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    questions: [...draft.questions, blankQuestion()],
+                  })
+                }
+              >
+                Agregar pregunta
+              </Button>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button disabled={hasPending}>
                 {contentChanged ? "Guardar para revisión" : "Guardar posición"}

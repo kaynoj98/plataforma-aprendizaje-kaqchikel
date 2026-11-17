@@ -20,8 +20,21 @@ export type Question = {
   term?: string | null;
   options: { label: string; correct: boolean }[];
 };
+export type Pair = {
+  editorKey?: string;
+  term: string;
+  translation: string;
+  variant?: string | null;
+  vocabularyId: string | null;
+  feedback: string;
+};
 export type Definition = {
-  type?: "MULTIPLE_CHOICE" | "IMAGE_RECOGNITION" | "AUDIO_RECOGNITION";
+  pairs?: Pair[];
+  type?:
+    | "MULTIPLE_CHOICE"
+    | "IMAGE_RECOGNITION"
+    | "AUDIO_RECOGNITION"
+    | "MATCHING";
   title: string;
   instructions: string;
   questions: Question[];

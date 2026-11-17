@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleX, ListChecks } from "lucide-react";
 import Link from "next/link";
+import { MatchingPractice } from "./matching-practice";
 import { StoredPreview } from "@/components/vocabulary/media-preview";
 import { Button } from "@/components/ui/button";
 import { api, message, type Summary } from "./api";
@@ -318,7 +319,9 @@ export function LessonPractices({
           className="space-y-2 break-words rounded-xl border bg-card p-4"
         >
           <h3 className="font-semibold">{item.title}</h3>
-          <p>{item.total} preguntas</p>
+          <p>
+            {item.total} {item.type === "MATCHING" ? "parejas" : "preguntas"}
+          </p>
           {!preview && item.type === "AUDIO_RECOGNITION" && (
             <p className="text-sm">
               <Link className="underline" href="/aprender/vocabulario">
@@ -327,7 +330,11 @@ export function LessonPractices({
               · Estudio independiente sin puntuación auditiva.
             </p>
           )}
-          <Practice id={item.id} preview={preview} />
+          {item.type === "MATCHING" ? (
+            <MatchingPractice id={item.id} preview={preview} />
+          ) : (
+            <Practice id={item.id} preview={preview} />
+          )}
         </article>
       ))}
     </section>

@@ -7,6 +7,8 @@ import { validateParams } from "../../middlewares/validate-params.js";
 import {
   choice,
   createActivity,
+  matchChoice,
+  matchSubmission,
   editActivity,
   start,
 } from "./activity.schemas.js";
@@ -52,6 +54,48 @@ for (const kind of ["image", "audio"] as const) {
     },
   );
 }
+activityRouter.post(
+  "/admin/activities/:id/matching-preview",
+  ...admin,
+  validateBody(
+    z
+      .object({
+        seed: z.uuid(),
+        versionId: z.uuid().optional(),
+        choices: z.array(matchChoice).max(256),
+      })
+      .strict(),
+  ),
+  async (req, res) => {
+    const { versionId, seed, choices } = req.body;
+    res
+      .set("Cache-Control", "private, no-store")
+      .json({
+        data: await service.matchingPreview(
+          String(req.params.id),
+          versionId,
+          seed,
+          choices,
+        ),
+      });
+  },
+);
+activityRouter.post(
+  "/activity-attempts/:id/matches",
+  ...student,
+  validateBody(matchSubmission),
+  async (req, res) => {
+    res
+      .set("Cache-Control", "private, no-store")
+      .json({
+        data: await service.match(
+          String(req.params.id),
+          req.auth!.user.id,
+          req.body,
+        ),
+      });
+  },
+);
 const previewBody = z
   .object({ versionId: z.uuid().optional(), choices: z.array(choice).max(50) })
   .strict();

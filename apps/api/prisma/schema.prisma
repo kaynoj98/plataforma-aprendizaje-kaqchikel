@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client"
+  previewFeatures = ["partialIndexes"]
   importFileExtension = "js"
   output   = "../src/generated/prisma"
 }
@@ -541,6 +542,7 @@ model VocabularyItem {
 
   lessonLinks LessonVocabulary[]
   activityQuestions ActivityQuestion[]
+  matchingPairs ActivityMatchingPair[]
 
   @@index([termKaqchikel])
   @@index([translationSpanish])
@@ -586,6 +588,7 @@ enum ActivityType {
   MULTIPLE_CHOICE
   IMAGE_RECOGNITION
   AUDIO_RECOGNITION
+  MATCHING
 }
 
 model Activity {
@@ -608,6 +611,7 @@ model ActivityVersion {
   number Int
   title String @db.VarChar(200)
   instructions String
+  pairs ActivityMatchingPair[]
   questions ActivityQuestion[]
   attempts ActivityAttempt[]
   @@unique([activityId, number])
@@ -662,6 +666,7 @@ model ActivityAttempt {
   startedAt DateTime @default(now()) @map("started_at") @db.Timestamptz(3)
   completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
   answers ActivityAnswer[]
+  matches ActivityMatchingSubmission[]
   @@unique([userId,requestId])
   @@unique([id,versionId])
   @@index([userId,versionId])
@@ -680,4 +685,40 @@ model ActivityAnswer {
   answeredAt DateTime @default(now()) @map("answered_at") @db.Timestamptz(3)
   @@id([attemptId,questionId])
   @@map("activity_answers")
+}
+
+model ActivityMatchingPair {
+  id String @id @default(uuid()) @db.Uuid
+  versionId String @map("version_id") @db.Uuid
+  version ActivityVersion @relation(fields:[versionId],references:[id],onDelete:Restrict)
+  position Int
+  term String @db.VarChar(200)
+  translation String @db.VarChar(255)
+  feedback String
+  variant String?
+  vocabularyId String? @map("vocabulary_id") @db.Uuid
+  vocabulary VocabularyItem? @relation(fields:[vocabularyId],references:[id],onDelete:Restrict)
+  termSelections ActivityMatchingSubmission[] @relation("MatchingTerm")
+  translationSelections ActivityMatchingSubmission[] @relation("MatchingTranslation")
+  @@unique([id,versionId])
+  @@unique([versionId,position])
+  @@index([vocabularyId])
+  @@map("activity_matching_pairs")
+}
+
+model ActivityMatchingSubmission {
+  attemptId String @map("attempt_id") @db.Uuid
+  versionId String @map("version_id") @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  termId String @map("term_id") @db.Uuid
+  translationId String @map("translation_id") @db.Uuid
+  sequence Int
+  correct Boolean
+  attempt ActivityAttempt @relation(fields:[attemptId,versionId],references:[id,versionId],onDelete:Restrict)
+  term ActivityMatchingPair @relation("MatchingTerm",fields:[termId,versionId],references:[id,versionId],onDelete:Restrict)
+  translation ActivityMatchingPair @relation("MatchingTranslation",fields:[translationId,versionId],references:[id,versionId],onDelete:Restrict)
+  @@id([attemptId,requestId])
+  @@unique([attemptId,sequence])
+  @@unique([attemptId,termId], where: { correct: true }, map:"matching_completed_pair_key")
+  @@map("activity_matching_submissions")
 }
