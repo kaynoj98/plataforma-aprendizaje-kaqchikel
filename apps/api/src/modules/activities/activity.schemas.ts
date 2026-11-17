@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+export const writingKey = (text: string) => text.normalize("NFC").trim();
+// PostgreSQL text requires Unicode scalar values and excludes U+0000.
+const storable = (s: string) => !/[\u0000\uD800-\uDFFF]/u.test(s);
+export const writtenChoice = z
+  .object({
+    questionId: z.uuid(),
+    requestId: z.uuid(),
+    responseText: z
+      .string()
+      .max(500)
+      .refine(
+        (s) => storable(s) && writingKey(s).length > 0,
+        "Escribe una respuesta válida de hasta 500 caracteres.",
+      ),
+  })
+  .strict();
 const option = z
   .object({ label: z.string().trim().min(1).max(500), correct: z.boolean() })
   .strict();
@@ -12,16 +28,10 @@ const question = z
     imageMediaId: z.uuid().nullish(),
     imageDescription: z.string().trim().min(1).max(500).nullish(),
     vocabularyId: z.uuid().nullable().default(null),
-    options: z.array(option).min(2).max(10),
+    options: z.array(option).min(1).max(10),
   })
   .strict()
   .superRefine(({ options }, ctx) => {
-    if (options.filter((o) => o.correct).length !== 1)
-      ctx.addIssue({
-        code: "custom",
-        path: ["options"],
-        message: "Selecciona una respuesta correcta por pregunta.",
-      });
     if (new Set(options.map((o) => o.label)).size !== options.length)
       ctx.addIssue({
         code: "custom",
@@ -53,6 +63,7 @@ export const definition = z
         "IMAGE_RECOGNITION",
         "AUDIO_RECOGNITION",
         "MATCHING",
+        "WRITING",
       ])
       .default("MULTIPLE_CHOICE"),
     title: z.string().trim().min(1).max(200),
@@ -91,6 +102,22 @@ export const definition = z
         message: "Selecciona preguntas para esta modalidad.",
       });
     for (const [i, q] of questions.entries()) {
+      const valid =
+        type === "WRITING"
+          ? q.options.every((o) => o.correct && storable(o.label)) &&
+            new Set(q.options.map((o) => writingKey(o.label))).size ===
+              q.options.length
+          : q.options.length >= 2 &&
+            q.options.filter((o) => o.correct).length === 1;
+      if (!valid)
+        ctx.addIssue({
+          code: "custom",
+          path: ["questions", i, "options"],
+          message:
+            type === "WRITING"
+              ? "Registra formas aceptadas válidas y distintas."
+              : "Incluye al menos dos opciones y una única respuesta correcta.",
+        });
       const audio = type === "AUDIO_RECOGNITION";
       if (
         audio

@@ -9,6 +9,7 @@ export type Summary = {
   revision: number;
 };
 export type Question = {
+  variantSnapshot?: string | null;
   audioMediaId?: string | null;
   audioTranscript?: string | null;
   editorKey?: string;
@@ -34,7 +35,8 @@ export type Definition = {
     | "MULTIPLE_CHOICE"
     | "IMAGE_RECOGNITION"
     | "AUDIO_RECOGNITION"
-    | "MATCHING";
+    | "MATCHING"
+    | "WRITING";
   title: string;
   instructions: string;
   questions: Question[];

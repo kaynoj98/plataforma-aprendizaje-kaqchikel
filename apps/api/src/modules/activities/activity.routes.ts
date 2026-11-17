@@ -6,6 +6,7 @@ import { validateBody } from "../../middlewares/validate-body.js";
 import { validateParams } from "../../middlewares/validate-params.js";
 import {
   choice,
+  writtenChoice,
   createActivity,
   matchChoice,
   matchSubmission,
@@ -68,16 +69,14 @@ activityRouter.post(
   ),
   async (req, res) => {
     const { versionId, seed, choices } = req.body;
-    res
-      .set("Cache-Control", "private, no-store")
-      .json({
-        data: await service.matchingPreview(
-          String(req.params.id),
-          versionId,
-          seed,
-          choices,
-        ),
-      });
+    res.set("Cache-Control", "private, no-store").json({
+      data: await service.matchingPreview(
+        String(req.params.id),
+        versionId,
+        seed,
+        choices,
+      ),
+    });
   },
 );
 activityRouter.post(
@@ -85,19 +84,20 @@ activityRouter.post(
   ...student,
   validateBody(matchSubmission),
   async (req, res) => {
-    res
-      .set("Cache-Control", "private, no-store")
-      .json({
-        data: await service.match(
-          String(req.params.id),
-          req.auth!.user.id,
-          req.body,
-        ),
-      });
+    res.set("Cache-Control", "private, no-store").json({
+      data: await service.match(
+        String(req.params.id),
+        req.auth!.user.id,
+        req.body,
+      ),
+    });
   },
 );
 const previewBody = z
-  .object({ versionId: z.uuid().optional(), choices: z.array(choice).max(50) })
+  .object({
+    versionId: z.uuid().optional(),
+    choices: z.array(z.union([choice, writtenChoice])).max(50),
+  })
   .strict();
 activityRouter.get(
   "/admin/lessons/:id/activities",
@@ -181,7 +181,7 @@ activityRouter.post(
 activityRouter.post(
   "/activity-attempts/:id/answers",
   ...student,
-  validateBody(choice),
+  validateBody(z.union([choice, writtenChoice])),
   async (req, res) => {
     res.json({
       data: await service.answer(

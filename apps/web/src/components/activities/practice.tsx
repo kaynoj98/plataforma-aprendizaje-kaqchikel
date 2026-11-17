@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleX, ListChecks } from "lucide-react";
 import Link from "next/link";
+import { WritingInput } from "./writing-input";
 import { MatchingPractice } from "./matching-practice";
 import { StoredPreview } from "@/components/vocabulary/media-preview";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,8 @@ type State = {
     term?: string | null;
     hasAudio?: boolean;
     imageDescription?: string;
-    options: { id: string; label: string }[];
+    writing?: boolean;
+    options?: { id: string; label: string }[];
   } | null;
   result: {
     total: number;
@@ -29,13 +31,16 @@ type State = {
     percentage: number;
   } | null;
 };
-type Choice = { questionId: string; optionId: string };
+type Written = { questionId: string; responseText: string; requestId: string };
+type Choice = { questionId: string; optionId: string } | Written;
 type Reply = {
   state: State;
   feedback: {
     correct: boolean;
     feedback: string;
     audioTranscript?: string;
+    accepted?: string[];
+    acceptedAlternative?: boolean;
   } | null;
 };
 export function Practice({
@@ -52,6 +57,7 @@ export function Practice({
   const [error, setError] = useState("");
   const lock = useRef(false);
   const request = useRef("");
+  const pendingWriting = useRef<Written | null>(null);
   const history = useRef<Choice[]>([]);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -85,6 +91,7 @@ export function Practice({
           });
       request.current = "";
       history.current = [];
+      pendingWriting.current = null;
       setState(next);
       setReply(undefined);
       select("");
@@ -92,7 +99,20 @@ export function Practice({
   }
   function submit() {
     if (!state?.question || !selected || reply) return;
-    const choice = { questionId: state.question.id, optionId: selected };
+    let choice: Choice;
+    const questionId = state.question.id;
+    if (state.question.writing) {
+      const prior = pendingWriting.current;
+      choice =
+        prior?.questionId === questionId && prior.responseText === selected
+          ? prior
+          : {
+              questionId,
+              responseText: selected,
+              requestId: crypto.randomUUID(),
+            };
+      pendingWriting.current = choice;
+    } else choice = { questionId, optionId: selected };
     void action(async () => {
       const choices = [...history.current, choice];
       const next = preview
@@ -106,6 +126,7 @@ export function Practice({
             choice,
           );
       if (preview) history.current = choices;
+      pendingWriting.current = null;
       setReply(next);
     });
   }
@@ -194,23 +215,27 @@ export function Practice({
                   {state.question.term && (
                     <p lang="cak">{state.question.term}</p>
                   )}
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {state.question.options.map((o) => (
-                      <label
-                        key={o.id}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-muted"
-                      >
-                        <input
-                          type="radio"
-                          name={"choice-" + id}
-                          checked={selected === o.id}
-                          onChange={() => select(o.id)}
-                          className="mt-1"
-                        />
-                        <span className="min-w-0 break-words">{o.label}</span>
-                      </label>
-                    ))}
-                  </div>
+                  {state.question.writing ? (
+                    <WritingInput value={selected} onChange={select} />
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {state.question.options?.map((o) => (
+                        <label
+                          key={o.id}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-muted"
+                        >
+                          <input
+                            type="radio"
+                            name={"choice-" + id}
+                            checked={selected === o.id}
+                            onChange={() => select(o.id)}
+                            className="mt-1"
+                          />
+                          <span className="min-w-0 break-words">{o.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </fieldset>
                 {reply ? (
                   <>
@@ -231,6 +256,39 @@ export function Practice({
                           </>
                         )}
                       </p>
+                      {reply.feedback?.acceptedAlternative && (
+                        <p>Coincide con una alternativa autorizada.</p>
+                      )}
+                      {reply.feedback?.accepted && !reply.feedback.correct && (
+                        <p>
+                          La forma escrita no coincide con las respuestas
+                          autorizadas para esta pregunta.
+                        </p>
+                      )}
+                      {reply.feedback?.accepted && (
+                        <div>
+                          <p>
+                            Respuesta principal:{" "}
+                            <strong
+                              lang="cak"
+                              className="whitespace-pre-wrap break-words"
+                            >
+                              {reply.feedback.accepted[0]}
+                            </strong>
+                          </p>
+                          {reply.feedback.accepted.length > 1 && (
+                            <p>
+                              Alternativas autorizadas:{" "}
+                              <span
+                                lang="cak"
+                                className="whitespace-pre-wrap break-words"
+                              >
+                                {reply.feedback.accepted.slice(1).join(" · ")}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {reply.feedback?.audioTranscript && (
                         <div>
                           <strong>Transcripción de la grabación</strong>
@@ -258,7 +316,7 @@ export function Practice({
                     </Button>
                   </>
                 ) : (
-                  <Button disabled={!selected || busy} onClick={submit}>
+                  <Button disabled={!selected.trim() || busy} onClick={submit}>
                     Comprobar respuesta
                   </Button>
                 )}

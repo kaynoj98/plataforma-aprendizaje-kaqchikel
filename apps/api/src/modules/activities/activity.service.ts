@@ -2,7 +2,12 @@ import { previewBoard, recordMatch, resumeBoard } from "./matching.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../errors/app-error.js";
 import { Prisma } from "../../generated/prisma/client.js";
-import { type Definition, totals, reveals } from "./activity.schemas.js";
+import {
+  type Definition,
+  totals,
+  reveals,
+  writingKey,
+} from "./activity.schemas.js";
 
 import { env } from "../../config/env.js";
 import {
@@ -16,7 +21,8 @@ import {
 } from "../media/media.constants.js";
 
 type Tx = Prisma.TransactionClient;
-type Choice = { questionId: string; optionId: string };
+type Written = { questionId: string; requestId: string; responseText: string };
+type Choice = { questionId: string; optionId: string } | Written;
 const published = { status: "PUBLISHED", deletedAt: null } as const;
 const publicLesson = {
   ...published,
@@ -24,6 +30,7 @@ const publicLesson = {
 };
 const available = { isVisible: true, lesson: publicLesson };
 const content = {
+  activity: { select: { type: true } },
   pairs: { orderBy: { position: "asc" } },
   questions: {
     orderBy: { position: "asc" },
@@ -241,6 +248,10 @@ async function writeVersion(
               feedback: q.feedback,
               position,
               vocabularyId: q.vocabularyId,
+              variantSnapshot:
+                draft.type === "WRITING"
+                  ? words.find((w) => w.id === q.vocabularyId)?.variant?.name
+                  : null,
               termSnapshot: q.vocabularyId ? terms.get(q.vocabularyId) : null,
               correctPosition: q.options.findIndex((o) => o.correct),
               options: {
@@ -353,13 +364,17 @@ export async function readAdmin(id: string) {
         feedback: q.feedback,
         vocabularyId: q.vocabularyId,
         term: q.termSnapshot,
+        ...(activity.type === "WRITING"
+          ? { variantSnapshot: q.variantSnapshot }
+          : {}),
         audioMediaId: q.audioMediaId,
         audioTranscript: q.audioTranscript,
         imageMediaId: q.imageMediaId,
         imageDescription: q.imageDescription,
         options: q.options.map((o) => ({
           label: o.label,
-          correct: o.position === q.correctPosition,
+          correct:
+            activity.type === "WRITING" || o.position === q.correctPosition,
         })),
       })),
     },
@@ -368,6 +383,18 @@ export async function readAdmin(id: string) {
 function evaluate(v: Version, index: number, choice: Choice) {
   const q = v.questions[index];
   if (!q || q.id !== choice.questionId) conflict();
+  if (v.activity.type === "WRITING" && "responseText" in choice) {
+    const accepted = q.options.map((o) => o.label);
+    const submitted = writingKey(choice.responseText);
+    const index = accepted.findIndex((s) => writingKey(s) === submitted);
+    return {
+      correct: index >= 0,
+      acceptedAlternative: index > 0,
+      feedback: q.feedback,
+      accepted,
+    };
+  }
+  if (v.activity.type === "WRITING" || !("optionId" in choice)) conflict();
   const option = q.options.find((o) => o.id === choice.optionId);
   if (!option)
     throw new AppError(
@@ -395,16 +422,18 @@ function view(
     total: v.questions.length,
     answered: answers.length,
     question: q
-      ? {
-          id: q.id,
-          prompt: q.prompt,
-          ...(q.audioMediaId
-            ? { hasAudio: true }
-            : q.imageMediaId
-              ? { imageDescription: q.imageDescription }
-              : { term: q.termSnapshot }),
-          options: q.options.map(({ id, label }) => ({ id, label })),
-        }
+      ? v.activity.type === "WRITING"
+        ? { id: q.id, prompt: q.prompt, writing: true }
+        : {
+            id: q.id,
+            prompt: q.prompt,
+            ...(q.audioMediaId
+              ? { hasAudio: true }
+              : q.imageMediaId
+                ? { imageDescription: q.imageDescription }
+                : { term: q.termSnapshot }),
+            options: q.options.map(({ id, label }) => ({ id, label })),
+          }
       : null,
     result: q
       ? null
@@ -507,6 +536,7 @@ export async function match(
   });
 }
 const attemptData = {
+  writingSubmissions: { orderBy: { question: { position: "asc" } } },
   version: { include: content },
   answers: { orderBy: { question: { position: "asc" } } },
 } as const;
@@ -535,7 +565,13 @@ export async function begin(id: string, userId: string, requestId: string) {
         ...(await resumeBoard(tx, attempt.version, attempt.id)),
         resumeKey: attempt.requestId,
       };
-    return view(attempt.version, attempt.answers, attempt.id);
+    return view(
+      attempt.version,
+      attempt.version.activity.type === "WRITING"
+        ? attempt.writingSubmissions
+        : attempt.answers,
+      attempt.id,
+    );
   });
 }
 export async function answer(
@@ -551,6 +587,45 @@ export async function answer(
     });
     if (!attempt) missing();
     const { version, answers } = attempt;
+    if (version.activity.type === "WRITING") {
+      if (!("responseText" in selected)) conflict();
+      const rows = attempt.writingSubmissions;
+      const previous = rows.findIndex(
+        (r) => r.requestId === selected.requestId,
+      );
+      if (previous >= 0) {
+        const r = rows[previous]!;
+        if (
+          r.responseText !== selected.responseText ||
+          r.questionId !== selected.questionId
+        )
+          conflict();
+        return {
+          state: view(version, rows.slice(0, previous + 1), attemptId),
+          feedback: {
+            ...evaluate(version, previous, selected),
+            correct: r.correct,
+          },
+        };
+      }
+      const feedback = evaluate(version, rows.length, selected);
+      const row = await tx.activityWritingSubmission.create({
+        data: {
+          attemptId,
+          versionId: version.id,
+          ...selected,
+          correct: feedback.correct,
+        },
+      });
+      rows.push(row);
+      if (rows.length === version.questions.length)
+        await tx.activityAttempt.update({
+          where: { id: attemptId },
+          data: { completedAt: new Date() },
+        });
+      return { state: view(version, rows, attemptId), feedback };
+    }
+    if (!("optionId" in selected)) conflict();
     const previous = answers.findIndex(
       (a) => a.questionId === selected.questionId,
     );

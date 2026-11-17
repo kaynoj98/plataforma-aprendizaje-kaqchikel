@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { verifyWriting } from "./writing-activity.fixture.js";
 import { verifyMatching } from "./matching-activity.fixture.js";
 import { verifyAudioActivity } from "./audio-activity.fixture.js";
 import { verifyVisualActivity } from "./visual-activity.fixture.js";
@@ -293,6 +294,7 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
           courseId,
         );
         await verifyMatching(admin!, user!, other!, lessonId, wordId);
+        await verifyWriting(admin!, user!, other!, lessonId, wordId);
         expect(await prisma.lessonProgress.count({ where: { lessonId } })).toBe(
           0,
         );
@@ -310,6 +312,9 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
         }
         const version = { activity: { lessonId } };
         await prisma.$transaction([
+          prisma.activityWritingSubmission.deleteMany({
+            where: { attempt: { version } },
+          }),
           prisma.activityMatchingSubmission.deleteMany({
             where: { attempt: { version } },
           }),

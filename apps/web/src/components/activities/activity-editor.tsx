@@ -23,20 +23,22 @@ const blankPair = (): Pair => ({
   vocabularyId: null,
   feedback: "",
 });
-const blankQuestion = (): Question => ({
+const blankQuestion = (writing = false): Question => ({
   editorKey: crypto.randomUUID(),
   prompt: "",
   feedback: "",
   vocabularyId: null,
-  options: [
-    { label: "", correct: true },
-    { label: "", correct: false },
-  ],
+  options: writing
+    ? [{ label: "", correct: true }]
+    : [
+        { label: "", correct: true },
+        { label: "", correct: false },
+      ],
 });
-const blank = (): Definition => ({
+const blank = (writing = false): Definition => ({
   title: "",
   instructions: "",
-  questions: [blankQuestion()],
+  questions: [blankQuestion(writing)],
 });
 function swap<T>(items: T[], a: number, b: number) {
   const next = [...items];
@@ -243,6 +245,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
   const [selected, setSelected] = useState<Document & { id: string }>();
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const hasPending = draft?.questions.some((q) => pending[q.editorKey!]);
+  const writing = draft?.type === "WRITING";
   const audio = draft?.type === "AUDIO_RECOGNITION";
   const kind = audio ? "audio" : "image";
   const mediaField = audio ? "audioMediaId" : "imageMediaId";
@@ -390,6 +393,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               "IMAGE_RECOGNITION",
               "AUDIO_RECOGNITION",
               "MATCHING",
+              "WRITING",
             ] as const
           ).map((type) => (
             <Button
@@ -410,17 +414,19 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                         pairs: Array.from({ length: 3 }, blankPair),
                         type,
                       }
-                    : { ...blank(), type },
+                    : { ...blank(type === "WRITING"), type },
                 );
               }}
             >
-              {type === "MATCHING"
-                ? "Crear relación de palabras"
-                : type === "AUDIO_RECOGNITION"
-                  ? "Crear comprensión auditiva"
-                  : type === "IMAGE_RECOGNITION"
-                    ? "Crear reconocimiento visual"
-                    : "Crear selección múltiple"}
+              {type === "WRITING"
+                ? "Crear práctica de escritura"
+                : type === "MATCHING"
+                  ? "Crear relación de palabras"
+                  : type === "AUDIO_RECOGNITION"
+                    ? "Crear comprensión auditiva"
+                    : type === "IMAGE_RECOGNITION"
+                      ? "Crear reconocimiento visual"
+                      : "Crear selección múltiple"}
             </Button>
           ))}
           <Button
@@ -539,7 +545,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
               >
                 <legend>Pregunta {i + 1}</legend>
                 <label>
-                  Enunciado
+                  {writing ? "Indicación en español" : "Enunciado"}
                   <textarea
                     required
                     className={field}
@@ -552,12 +558,20 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 </label>
                 {q.vocabularyId && (
                   <p>
-                    Término vinculado · {q.term}{" "}
+                    Término vinculado · {q.term}
+                    {writing && q.variantSnapshot
+                      ? " · " + q.variantSnapshot
+                      : ""}{" "}
                     <Button
                       type="button"
                       variant="ghost"
                       onClick={() =>
-                        change(i, { ...q, vocabularyId: null, term: null })
+                        change(i, {
+                          ...q,
+                          vocabularyId: null,
+                          term: null,
+                          variantSnapshot: null,
+                        })
                       }
                     >
                       Quitar vínculo
@@ -577,8 +591,22 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                           })
                       : undefined
                   }
-                  onPick={(vocabularyId, term) =>
-                    change(i, { ...q, vocabularyId, term })
+                  onPick={(vocabularyId, term, translation, variantSnapshot) =>
+                    change(i, {
+                      ...q,
+                      vocabularyId,
+                      term,
+                      ...(writing
+                        ? {
+                            variantSnapshot,
+                            prompt: q.prompt || translation,
+                            options: [
+                              { label: term, correct: true },
+                              ...q.options.slice(1),
+                            ],
+                          }
+                        : {}),
+                    })
                   }
                 />
                 {(audio || draft.type === "IMAGE_RECOGNITION") && (
@@ -634,7 +662,11 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                     className="grid items-end gap-2 sm:grid-cols-[1fr_auto_auto]"
                   >
                     <label>
-                      Opción {j + 1}
+                      {writing
+                        ? j === 0
+                          ? "Respuesta principal en Kaqchikel"
+                          : "Alternativa autorizada " + j
+                        : "Opción " + (j + 1)}
                       <input
                         required
                         className={field}
@@ -650,27 +682,29 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                         }
                       />
                     </label>
-                    <label className="p-2">
-                      <input
-                        type="radio"
-                        name={"correct-" + i}
-                        checked={o.correct}
-                        onChange={() =>
-                          change(i, {
-                            ...q,
-                            options: q.options.map((v, n) => ({
-                              ...v,
-                              correct: n === j,
-                            })),
-                          })
-                        }
-                      />{" "}
-                      Correcta
-                    </label>
+                    {!writing && (
+                      <label className="p-2">
+                        <input
+                          type="radio"
+                          name={"correct-" + i}
+                          checked={o.correct}
+                          onChange={() =>
+                            change(i, {
+                              ...q,
+                              options: q.options.map((v, n) => ({
+                                ...v,
+                                correct: n === j,
+                              })),
+                            })
+                          }
+                        />{" "}
+                        Correcta
+                      </label>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
-                      disabled={q.options.length <= 2}
+                      disabled={writing ? j === 0 : q.options.length <= 2}
                       onClick={() =>
                         change(i, {
                           ...q,
@@ -678,26 +712,30 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                         })
                       }
                     >
-                      Quitar opción {j + 1}
+                      {writing
+                        ? "Quitar alternativa"
+                        : "Quitar opción " + (j + 1)}
                     </Button>
-                    <div className="flex flex-wrap gap-2 sm:col-span-full">
-                      {[-1, 1].map((delta) => (
-                        <Button
-                          key={delta}
-                          type="button"
-                          variant="outline"
-                          disabled={!q.options[j + delta]}
-                          onClick={() =>
-                            change(i, {
-                              ...q,
-                              options: swap(q.options, j, j + delta),
-                            })
-                          }
-                        >
-                          {delta < 0 ? "Subir" : "Bajar"} opción {j + 1}
-                        </Button>
-                      ))}
-                    </div>
+                    {!writing && (
+                      <div className="flex flex-wrap gap-2 sm:col-span-full">
+                        {[-1, 1].map((delta) => (
+                          <Button
+                            key={delta}
+                            type="button"
+                            variant="outline"
+                            disabled={!q.options[j + delta]}
+                            onClick={() =>
+                              change(i, {
+                                ...q,
+                                options: swap(q.options, j, j + delta),
+                              })
+                            }
+                          >
+                            {delta < 0 ? "Subir" : "Bajar"} opción {j + 1}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <Button
@@ -707,11 +745,13 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                   onClick={() =>
                     change(i, {
                       ...q,
-                      options: [...q.options, { label: "", correct: false }],
+                      options: [...q.options, { label: "", correct: writing }],
                     })
                   }
                 >
-                  Agregar opción
+                  {writing
+                    ? "Agregar alternativa autorizada"
+                    : "Agregar opción"}
                 </Button>
                 <label className="block">
                   Retroalimentación opcional
@@ -765,7 +805,7 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 onClick={() =>
                   setDraft({
                     ...draft,
-                    questions: [...draft.questions, blankQuestion()],
+                    questions: [...draft.questions, blankQuestion(writing)],
                   })
                 }
               >
