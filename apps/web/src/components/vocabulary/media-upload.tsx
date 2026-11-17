@@ -26,9 +26,10 @@ const formats: Record<Kind, Record<string, string[]>> = {
   },
 };
 
-export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending, lesson = false }: {
+export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending, lesson = false, activity = false }: {
   kind: Kind;
   lesson?: boolean;
+  activity?: boolean;
   mediaId?: string;
   disabled: boolean;
   onUploaded: (id: string) => void;
@@ -113,7 +114,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending, le
   return (
     <fieldset disabled={disabled || busy} className="min-w-0 space-y-3 rounded-xl border bg-card p-4 text-sm">
       <legend className="px-1.5 font-semibold">
-        {lesson ? "Archivo de " + noun : isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}
+        {lesson || activity ? "Archivo de " + noun : isImage ? "Imagen de vocabulario" : "Audio de pronunciación"}
       </legend>
 
       {(localUrl || mediaId) && (
@@ -195,7 +196,7 @@ export function MediaUpload({ kind, mediaId, disabled, onUploaded, onPending, le
         {busy ? "Subida en curso…" : awaitingSave && !file && (
           <p className="flex items-start gap-2 text-xs text-muted-foreground">
             <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />
-            Archivo subido. Guarda los cambios para asociarlo {lesson ? "al bloque" : "a la palabra"}.
+            Archivo subido. Guarda los cambios para asociarlo {activity ? "a la pregunta" : lesson ? "al bloque" : "a la palabra"}.
           </p>
         )}
       </div>

@@ -67,6 +67,8 @@ const envSchema = z
       .default("true")
       .transform((value) => value === "true"),
 
+    FFMPEG_PATH: z.string().min(1).default("ffmpeg"),
+    FFPROBE_PATH: z.string().min(1).default("ffprobe"),
     MEDIA_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(500).default(250),
 
     MEDIA_ACCESS_URL_MINUTES: z.coerce

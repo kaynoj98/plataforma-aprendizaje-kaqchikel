@@ -36,9 +36,11 @@ function swap<T>(items: T[], a: number, b: number) {
 }
 function WordPicker({
   onPick,
-  onImage,
+  onMedia,
+  kind,
 }: {
-  onImage?: (id: string, term: string, mediaId: string) => void;
+  kind: "audio" | "image";
+  onMedia?: (id: string, term: string, mediaId: string) => void;
   onPick: (id: string, term: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -47,6 +49,8 @@ function WordPicker({
       id: string;
       termKaqchikel: string;
       translationEs: string;
+      variant?: { name: string; region?: string | null } | null;
+      pronunciationMedia: { id: string } | null;
       imageMedia: { id: string } | null;
     }[]
   >([]);
@@ -85,28 +89,33 @@ function WordPicker({
         Buscar palabras
       </Button>
       <p role="status">{status}</p>
-      {words.map((w) => (
-        <div key={w.id}>
-          <Button
-            className="m-1 whitespace-normal"
-            type="button"
-            variant="outline"
-            key={w.id}
-            onClick={() => onPick(w.id, w.termKaqchikel)}
-          >
-            {w.termKaqchikel} · {w.translationEs}
-          </Button>
-          {onImage && w.imageMedia && (
+      {words.map((w) => {
+        const media = kind === "audio" ? w.pronunciationMedia : w.imageMedia;
+        return (
+          <div key={w.id}>
             <Button
+              className="m-1 whitespace-normal"
               type="button"
               variant="outline"
-              onClick={() => onImage(w.id, w.termKaqchikel, w.imageMedia!.id)}
+              key={w.id}
+              onClick={() => onPick(w.id, w.termKaqchikel)}
             >
-              Vincular y usar su imagen
+              {w.termKaqchikel} · {w.translationEs}
+              {w.variant ? " · " + w.variant.name : ""}
             </Button>
-          )}
-        </div>
-      ))}
+            {onMedia && media && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onMedia(w.id, w.termKaqchikel, media.id)}
+              >
+                Vincular y usar{" "}
+                {kind === "audio" ? "su pronunciación" : "su imagen"}
+              </Button>
+            )}
+          </div>
+        );
+      })}
     </details>
   );
 }
@@ -117,13 +126,16 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
   const [selected, setSelected] = useState<Document & { id: string }>();
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const hasPending = draft?.questions.some((q) => pending[q.editorKey!]);
-  function selectImage(key: string, imageMediaId: string) {
+  const audio = draft?.type === "AUDIO_RECOGNITION";
+  const kind = audio ? "audio" : "image";
+  const mediaField = audio ? "audioMediaId" : "imageMediaId";
+  function selectMedia(key: string, id: string) {
     setDraft(
       (current) =>
         current && {
           ...current,
           questions: current.questions.map((q) =>
-            q.editorKey === key ? { ...q, imageMediaId } : q,
+            q.editorKey === key ? { ...q, [mediaField]: id } : q,
           ),
         },
     );
@@ -193,9 +205,13 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
           options,
           imageMediaId,
           imageDescription,
+          audioMediaId,
+          audioTranscript,
         }) => ({
           imageMediaId,
           imageDescription,
+          audioMediaId,
+          audioTranscript,
           prompt,
           feedback,
           vocabularyId,
@@ -238,7 +254,13 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
       <p role="status">{busy ? "Guardando o consultando…" : notice}</p>
       {!draft && (
         <>
-          {(["MULTIPLE_CHOICE", "IMAGE_RECOGNITION"] as const).map((type) => (
+          {(
+            [
+              "MULTIPLE_CHOICE",
+              "IMAGE_RECOGNITION",
+              "AUDIO_RECOGNITION",
+            ] as const
+          ).map((type) => (
             <Button
               key={type}
               disabled={busy}
@@ -251,9 +273,11 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                 setDraft({ ...blank(), type });
               }}
             >
-              {type === "IMAGE_RECOGNITION"
-                ? "Crear reconocimiento visual"
-                : "Crear selección múltiple"}
+              {type === "AUDIO_RECOGNITION"
+                ? "Crear comprensión auditiva"
+                : type === "IMAGE_RECOGNITION"
+                  ? "Crear reconocimiento visual"
+                  : "Crear selección múltiple"}
             </Button>
           ))}
           <Button
@@ -386,24 +410,30 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                   </p>
                 )}
                 <WordPicker
-                  onImage={
-                    draft.type === "IMAGE_RECOGNITION"
-                      ? (vocabularyId, term, imageMediaId) =>
-                          change(i, { ...q, vocabularyId, term, imageMediaId })
+                  kind={kind}
+                  onMedia={
+                    audio || draft.type === "IMAGE_RECOGNITION"
+                      ? (vocabularyId, term, id) =>
+                          change(i, {
+                            ...q,
+                            vocabularyId,
+                            term,
+                            [mediaField]: id,
+                          })
                       : undefined
                   }
                   onPick={(vocabularyId, term) =>
                     change(i, { ...q, vocabularyId, term })
                   }
                 />
-                {draft.type === "IMAGE_RECOGNITION" && (
+                {(audio || draft.type === "IMAGE_RECOGNITION") && (
                   <>
                     <MediaUpload
-                      lesson
-                      kind="image"
-                      mediaId={q.imageMediaId ?? undefined}
+                      activity
+                      kind={kind}
+                      mediaId={q[mediaField] ?? undefined}
                       disabled={busy}
-                      onUploaded={(id) => selectImage(q.editorKey!, id)}
+                      onUploaded={(id) => selectMedia(q.editorKey!, id)}
                       onPending={(value) =>
                         setPending((prev) => ({
                           ...prev,
@@ -412,24 +442,33 @@ export function ActivityEditor({ lessonId }: { lessonId: string }) {
                       }
                     />
                     <MediaLibrary
-                      kind="image"
+                      kind={kind}
                       disabled={busy || !!pending[q.editorKey!]}
-                      onSelect={(id) => selectImage(q.editorKey!, id)}
+                      onSelect={(id) => selectMedia(q.editorKey!, id)}
                     />
                     <label className="block">
-                      Pista descriptiva accesible
+                      {audio
+                        ? "Transcripción de la grabación"
+                        : "Pista descriptiva accesible"}
                       <textarea
                         required
-                        maxLength={500}
+                        maxLength={audio ? 3000 : 500}
                         className={field}
-                        value={q.imageDescription ?? ""}
+                        value={
+                          (audio ? q.audioTranscript : q.imageDescription) ?? ""
+                        }
                         onChange={(e) =>
-                          change(i, { ...q, imageDescription: e.target.value })
+                          change(i, {
+                            ...q,
+                            [audio ? "audioTranscript" : "imageDescription"]:
+                              e.target.value,
+                          })
                         }
                       />
                       <span className="text-sm text-muted-foreground">
-                        Describe rasgos que permitan elegir una opción sin
-                        nombrar la solución.
+                        {audio
+                          ? "Usa una grabación de hasta cinco minutos. El estudiante podrá leer la transcripción después de responder."
+                          : "Describe rasgos que permitan elegir una opción sin nombrar la solución."}
                       </span>
                     </label>
                   </>

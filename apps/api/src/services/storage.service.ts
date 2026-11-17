@@ -12,6 +12,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { createReadStream } from "node:fs";
 
+import { practiceAudio } from "./practice-audio.js";
 import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { AppError } from "../errors/app-error.js";
@@ -35,6 +36,14 @@ export function practiceImageKey(objectKey: string) {
     "practice-images/" +
     createHash("sha256").update(objectKey).digest("hex") +
     ".webp"
+  );
+}
+
+export function practiceAudioKey(objectKey: string) {
+  return (
+    "practice-audio/v1/" +
+    createHash("sha256").update(objectKey).digest("hex") +
+    ".wav"
   );
 }
 
@@ -72,6 +81,42 @@ export const storageService = {
 
         Key: objectKey,
       }),
+    );
+  },
+
+  async preparePracticeAudio(objectKey: string, mime: string) {
+    const target = { Bucket: env.S3_BUCKET, Key: practiceAudioKey(objectKey) };
+    try {
+      await client.send(new HeadObjectCommand(target));
+      return;
+    } catch (error) {
+      if (
+        !(
+          error instanceof S3ServiceException &&
+          error.$metadata.httpStatusCode === 404
+        )
+      )
+        throw error;
+    }
+    const source = await client.send(
+      new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: objectKey }),
+    );
+    if (
+      !source.Body ||
+      !source.ContentLength ||
+      source.ContentLength > 30 * 1024 * 1024
+    )
+      throw new AppError(
+        400,
+        "INVALID_AUDIO",
+        "Selecciona un audio disponible de hasta 30 MiB.",
+      );
+    const wav = await practiceAudio(
+      await source.Body.transformToByteArray(),
+      mime,
+    );
+    await client.send(
+      new PutObjectCommand({ ...target, ContentType: "audio/wav", Body: wav }),
     );
   },
 

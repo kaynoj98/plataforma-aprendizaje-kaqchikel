@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleX, ListChecks } from "lucide-react";
+import Link from "next/link";
 import { StoredPreview } from "@/components/vocabulary/media-preview";
 import { Button } from "@/components/ui/button";
 import { api, message, type Summary } from "./api";
@@ -16,6 +17,7 @@ type State = {
     id: string;
     prompt: string;
     term?: string | null;
+    hasAudio?: boolean;
     imageDescription?: string;
     options: { id: string; label: string }[];
   } | null;
@@ -29,7 +31,11 @@ type State = {
 type Choice = { questionId: string; optionId: string };
 type Reply = {
   state: State;
-  feedback: { correct: boolean; feedback: string } | null;
+  feedback: {
+    correct: boolean;
+    feedback: string;
+    audioTranscript?: string;
+  } | null;
 };
 export function Practice({
   id,
@@ -146,6 +152,14 @@ export function Practice({
                   max={state.total}
                   value={reply?.state.answered ?? state.answered}
                 />
+                {state.question.hasAudio && (
+                  <StoredPreview
+                    key={state.question.id}
+                    kind="audio"
+                    id={state.question.id}
+                    accessPath={`/api/v1/${preview ? "admin/activities/" + id : "activity-attempts/" + state.attemptId}/questions/${state.question.id}/audio`}
+                  />
+                )}
                 <fieldset
                   disabled={busy || Boolean(reply)}
                   className="space-y-2"
@@ -216,6 +230,14 @@ export function Practice({
                           </>
                         )}
                       </p>
+                      {reply.feedback?.audioTranscript && (
+                        <div>
+                          <strong>Transcripción de la grabación</strong>
+                          <p className="whitespace-pre-wrap" lang="cak">
+                            {reply.feedback.audioTranscript}
+                          </p>
+                        </div>
+                      )}
                       {reply.feedback?.feedback && (
                         <p className="whitespace-pre-wrap">
                           {reply.feedback.feedback}
@@ -297,6 +319,14 @@ export function LessonPractices({
         >
           <h3 className="font-semibold">{item.title}</h3>
           <p>{item.total} preguntas</p>
+          {!preview && item.type === "AUDIO_RECOGNITION" && (
+            <p className="text-sm">
+              <Link className="underline" href="/aprender/vocabulario">
+                Estudiar vocabulario por escrito
+              </Link>{" "}
+              · Estudio independiente sin puntuación auditiva.
+            </p>
+          )}
           <Practice id={item.id} preview={preview} />
         </article>
       ))}

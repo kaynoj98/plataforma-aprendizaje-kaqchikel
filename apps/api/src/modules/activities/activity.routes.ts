@@ -19,31 +19,39 @@ const student = [authenticate, authorize("USER"), id];
 const questionParams = validateParams(
   z.object({ id: z.uuid(), questionId: z.uuid() }),
 );
-activityRouter.get(
-  "/activity-attempts/:id/questions/:questionId/image",
-  ...student,
-  questionParams,
-  async (req, res) => {
-    const data = await service.questionImage(
-      String(req.params.id),
-      String(req.params.questionId),
-      req.auth!.user.id,
-    );
-    res.set("Cache-Control", "private, no-store").json({ success: true, data });
-  },
-);
-activityRouter.get(
-  "/admin/activities/:id/questions/:questionId/image",
-  ...admin,
-  questionParams,
-  async (req, res) => {
-    const data = await service.questionImage(
-      String(req.params.id),
-      String(req.params.questionId),
-    );
-    res.set("Cache-Control", "private, no-store").json({ success: true, data });
-  },
-);
+for (const kind of ["image", "audio"] as const) {
+  activityRouter.get(
+    `/activity-attempts/:id/questions/:questionId/${kind}`,
+    ...student,
+    questionParams,
+    async (req, res) => {
+      const data = await service.questionMedia(
+        String(req.params.id),
+        String(req.params.questionId),
+        kind,
+        req.auth!.user.id,
+      );
+      res
+        .set("Cache-Control", "private, no-store")
+        .json({ success: true, data });
+    },
+  );
+  activityRouter.get(
+    `/admin/activities/:id/questions/:questionId/${kind}`,
+    ...admin,
+    questionParams,
+    async (req, res) => {
+      const data = await service.questionMedia(
+        String(req.params.id),
+        String(req.params.questionId),
+        kind,
+      );
+      res
+        .set("Cache-Control", "private, no-store")
+        .json({ success: true, data });
+    },
+  );
+}
 const previewBody = z
   .object({ versionId: z.uuid().optional(), choices: z.array(choice).max(50) })
   .strict();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export type MediaKind = "image" | "audio" | "video";
@@ -27,6 +27,26 @@ export function Preview({ kind, src, label, onError }: { kind: Kind; src: string
   // eslint-disable-next-line @next/next/no-img-element
   return <img className="max-h-52 max-w-full rounded-md object-contain"
     alt={label || "Imagen de vocabulario"} src={src} onError={onError} />;
+}
+
+function PracticeRecording({src,onError}:{src:string;onError:(unsupported:boolean)=>void}) {
+  const ref=useRef<HTMLAudioElement>(null);
+  const [speed,setSpeed]=useState(1);
+  const [notice,setNotice]=useState("");
+  useEffect(()=>{
+    const player=ref.current;
+    return ()=>{player?.pause();};
+  },[src]);
+  return <div className="space-y-2">
+    <audio ref={ref} controls preload="metadata" className="w-full" src={src}
+      aria-label="Grabación de la pregunta" onError={()=>onError(ref.current?.error?.code===4)}
+      onLoadedMetadata={()=>{if(ref.current)ref.current.playbackRate=speed;}}/>
+    <div className="flex flex-wrap items-center gap-3">
+      <Button type="button" variant="outline" onClick={()=>{const player=ref.current;if(player){player.currentTime=0;void player.play().catch(()=>setNotice("No se pudo iniciar la reproducción."));}}}>Repetir audio</Button>
+      <label>Velocidad <select className="rounded border p-1" value={speed} onChange={e=>{const rate=Number(e.target.value);setSpeed(rate);if(ref.current)ref.current.playbackRate=rate;}}>
+        <option value={0.75}>0.75×</option><option value={1}>1.0×</option></select></label>
+    </div>{notice && <p role="status">{notice}</p>}
+  </div>;
 }
 
 export function StoredPreview({ kind, id, label, accessPath, showName = false }: { kind: Kind; id: string; label?: string; accessPath?: string; showName?: boolean }) {
@@ -66,6 +86,10 @@ export function StoredPreview({ kind, id, label, accessPath, showName = false }:
   if (error) return <div className="space-y-2"><p role="alert">{error}</p>
     <Button type="button" variant="outline" onClick={refresh}>Reintentar vista previa</Button></div>;
   if (!link) return <p role="status">Cargando vista previa…</p>;
+  if (kind==="audio" && accessPath) return <PracticeRecording src={link.url} onError={unsupported=>{
+    if(Date.now()>=link.expires-1000) refresh();
+    else setError(unsupported ? "El navegador no puede reproducir este formato de audio." : "No se pudo reproducir la grabación.");
+  }}/>;
   return <>
     <Preview kind={kind} label={label} src={link.url} onError={() => {
       if (Date.now() >= link.expires - 1000) refresh();

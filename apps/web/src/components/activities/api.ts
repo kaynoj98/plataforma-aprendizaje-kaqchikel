@@ -1,4 +1,5 @@
 export type Summary = {
+  type: Definition["type"];
   id: string;
   title: string;
   instructions: string;
@@ -8,6 +9,8 @@ export type Summary = {
   revision: number;
 };
 export type Question = {
+  audioMediaId?: string | null;
+  audioTranscript?: string | null;
   editorKey?: string;
   imageMediaId?: string | null;
   imageDescription?: string | null;
@@ -18,7 +21,7 @@ export type Question = {
   options: { label: string; correct: boolean }[];
 };
 export type Definition = {
-  type?: "MULTIPLE_CHOICE" | "IMAGE_RECOGNITION";
+  type?: "MULTIPLE_CHOICE" | "IMAGE_RECOGNITION" | "AUDIO_RECOGNITION";
   title: string;
   instructions: string;
   questions: Question[];

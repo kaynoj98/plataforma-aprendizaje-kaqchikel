@@ -7,6 +7,8 @@ const question = z
   .object({
     prompt: z.string().trim().min(1).max(2000),
     feedback: z.string().trim().max(2000).default(""),
+    audioMediaId: z.uuid().nullish(),
+    audioTranscript: z.string().trim().min(1).max(3000).nullish(),
     imageMediaId: z.uuid().nullish(),
     imageDescription: z.string().trim().min(1).max(500).nullish(),
     vocabularyId: z.uuid().nullable().default(null),
@@ -31,7 +33,7 @@ const question = z
 export const definition = z
   .object({
     type: z
-      .enum(["MULTIPLE_CHOICE", "IMAGE_RECOGNITION"])
+      .enum(["MULTIPLE_CHOICE", "IMAGE_RECOGNITION", "AUDIO_RECOGNITION"])
       .default("MULTIPLE_CHOICE"),
     title: z.string().trim().min(1).max(200),
     instructions: z.string().trim().max(3000),
@@ -40,6 +42,18 @@ export const definition = z
   .strict()
   .superRefine(({ type, questions }, ctx) => {
     for (const [i, q] of questions.entries()) {
+      const audio = type === "AUDIO_RECOGNITION";
+      if (
+        audio
+          ? !q.audioMediaId || !q.audioTranscript
+          : q.audioMediaId || q.audioTranscript
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["questions", i],
+          message:
+            "Cada pregunta auditiva requiere una grabación y su transcripción.",
+        });
       const visual = type === "IMAGE_RECOGNITION";
       if (
         visual

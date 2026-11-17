@@ -6,7 +6,7 @@ import { rm } from "node:fs/promises";
 
 import { env } from "../../config/env.js";
 import { AppError } from "../../errors/app-error.js";
-import { storageService, practiceImageKey } from "../../services/storage.service.js";
+import { storageService, practiceAudioKey, practiceImageKey } from "../../services/storage.service.js";
 
 import {
   MAX_BYTES_BY_MEDIA_TYPE,
@@ -188,6 +188,7 @@ export const mediaService = {
     }
 
     // Primero se revoca el acceso. Un reintento puede completar la limpieza en Garage.
+    if (deleted.mediaType === "AUDIO") await storageService.delete(practiceAudioKey(deleted.objectKey));
     if (deleted.mediaType === "IMAGE") await storageService.delete(practiceImageKey(deleted.objectKey));
     await storageService.delete(deleted.objectKey);
     return deleted;

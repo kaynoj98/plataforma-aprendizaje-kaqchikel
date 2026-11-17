@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { verifyAudioActivity } from "./audio-activity.fixture.js";
 import { verifyVisualActivity } from "./visual-activity.fixture.js";
 import {
   storageService,
   practiceImageKey,
+  practiceAudioKey,
 } from "../src/services/storage.service.js";
 import argon2 from "argon2";
 import request from "supertest";
@@ -280,6 +282,7 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
         ).body.data;
         expect(newAttempt.total).toBe(1);
         expect(newAttempt.versionId).not.toBe(end.versionId);
+        await verifyAudioActivity(admin!, user!, other!, lessonId, wordId);
         await verifyVisualActivity(
           admin!,
           user!,
@@ -298,6 +301,8 @@ describe.runIf(process.env.TEST_ACTIVITIES_DB === "1")(
         });
         for (const file of files) {
           await storageService.delete(file.objectKey);
+          if (file.mediaType === "AUDIO")
+            await storageService.delete(practiceAudioKey(file.objectKey));
           if (file.mediaType === "IMAGE")
             await storageService.delete(practiceImageKey(file.objectKey));
         }

@@ -7,6 +7,7 @@ import { env } from "../../config/env.js";
 import {
   storageService,
   practiceImageKey,
+  practiceAudioKey,
 } from "../../services/storage.service.js";
 import {
   MAX_BYTES_BY_MEDIA_TYPE,
@@ -77,6 +78,62 @@ export async function listActivities(lessonId: string, admin: boolean) {
   }));
 }
 
+function audioIds(draft: Definition) {
+  return [
+    ...new Set(
+      draft.questions.flatMap((q) => (q.audioMediaId ? [q.audioMediaId] : [])),
+    ),
+  ].sort();
+}
+async function lockAudio(tx: Tx, id: string) {
+  await tx.$queryRaw`SELECT id FROM media_files WHERE id=${id}::uuid FOR UPDATE`;
+  const file = await tx.mediaFile.findFirst({
+    where: {
+      id,
+      mediaType: "AUDIO",
+      status: "AVAILABLE",
+      deletedAt: null,
+      sizeBytes: { gt: 0, lte: MAX_BYTES_BY_MEDIA_TYPE.AUDIO },
+      mimeType: {
+        in: Object.keys(MEDIA_TYPE_BY_MIME).filter(
+          (m) => MEDIA_TYPE_BY_MIME[m] === "AUDIO",
+        ),
+      },
+    },
+    select: { objectKey: true, mimeType: true },
+  });
+  if (!file)
+    throw new AppError(
+      400,
+      "INVALID_AUDIO",
+      "Selecciona una grabación disponible de hasta 30 MiB.",
+    );
+  return file;
+}
+async function prepareAudio(draft: Definition) {
+  for (const id of audioIds(draft)) {
+    await prisma.$transaction(
+      async (tx) => {
+        const file = await lockAudio(tx, id);
+        // La misma fila serializa solicitudes repetidas. El cerrojo global limita todos los procesos Express.
+        const [row] = await tx.$queryRaw<
+          { available: boolean }[]
+        >`SELECT pg_try_advisory_xact_lock(620063,1) AS available`;
+        if (!row?.available)
+          throw new AppError(
+            503,
+            "AUDIO_BUSY",
+            "Se está preparando otra grabación. Vuelve a guardar en unos instantes.",
+          );
+        await storageService.preparePracticeAudio(
+          file.objectKey,
+          file.mimeType,
+        );
+      },
+      { timeout: 110000 },
+    );
+  }
+}
 async function writeVersion(
   tx: Tx,
   activityId: string,
@@ -99,6 +156,7 @@ async function writeVersion(
       "Revisa los términos de vocabulario seleccionados.",
     );
   const terms = new Map(words.map((w) => [w.id, w.termKaqchikel]));
+  for (const id of audioIds(draft)) await lockAudio(tx, id);
   const imageIds = [
     ...new Set(
       draft.questions.flatMap((q) => (q.imageMediaId ? [q.imageMediaId] : [])),
@@ -153,6 +211,8 @@ async function writeVersion(
       instructions: draft.instructions,
       questions: {
         create: draft.questions.map((q, position) => ({
+          audioMediaId: q.audioMediaId,
+          audioTranscript: q.audioTranscript,
           imageMediaId: q.imageMediaId,
           imageDescription: q.imageDescription,
           prompt: q.prompt,
@@ -176,6 +236,7 @@ export async function create(
   draft: Definition,
   requestId: string,
 ) {
+  await prepareAudio(draft);
   return prisma.$transaction(
     async (tx) => {
       if (
@@ -208,6 +269,7 @@ export async function edit(
   isVisible: boolean,
   draft?: Definition,
 ) {
+  if (draft) await prepareAudio(draft);
   return prisma.$transaction(
     async (tx) => {
       const updated = await tx.activity.updateMany({
@@ -253,6 +315,8 @@ export async function readAdmin(id: string) {
         feedback: q.feedback,
         vocabularyId: q.vocabularyId,
         term: q.termSnapshot,
+        audioMediaId: q.audioMediaId,
+        audioTranscript: q.audioTranscript,
         imageMediaId: q.imageMediaId,
         imageDescription: q.imageDescription,
         options: q.options.map((o) => ({
@@ -274,6 +338,7 @@ function evaluate(v: Version, index: number, choice: Choice) {
       "La opción no pertenece a esta pregunta.",
     );
   return {
+    ...(q.audioMediaId ? { audioTranscript: q.audioTranscript } : {}),
     correct: option.position === q.correctPosition,
     feedback: q.feedback,
   };
@@ -295,9 +360,11 @@ function view(
       ? {
           id: q.id,
           prompt: q.prompt,
-          ...(q.imageMediaId
-            ? { imageDescription: q.imageDescription }
-            : { term: q.termSnapshot }),
+          ...(q.audioMediaId
+            ? { hasAudio: true }
+            : q.imageMediaId
+              ? { imageDescription: q.imageDescription }
+              : { term: q.termSnapshot }),
           options: q.options.map(({ id, label }) => ({ id, label })),
         }
       : null,
@@ -307,38 +374,42 @@ function view(
   };
 }
 
-export async function questionImage(
+export async function questionMedia(
   id: string,
   questionId: string,
+  kind: "image" | "audio",
   studentId?: string,
 ) {
   const scope = studentId
     ? { activity: available, attempts: { some: { id, userId: studentId } } }
     : { activity: { id, lesson: { deletedAt: null } } };
+  const selection = {
+    objectKey: true,
+    status: true,
+    deletedAt: true,
+    mediaType: true,
+  } as const;
   const q = await prisma.activityQuestion.findFirst({
     where: { id: questionId, version: scope },
     select: {
-      imageMedia: {
-        select: {
-          objectKey: true,
-          status: true,
-          deletedAt: true,
-          mediaType: true,
-        },
-      },
+      imageMedia: { select: selection },
+      audioMedia: { select: selection },
     },
   });
-  const media = q?.imageMedia;
+  const audio = kind === "audio";
+  const media = audio ? q?.audioMedia : q?.imageMedia;
   if (
     !media ||
     media.status !== "AVAILABLE" ||
     media.deletedAt ||
-    media.mediaType !== "IMAGE"
+    media.mediaType !== (audio ? "AUDIO" : "IMAGE")
   )
     missing();
   return {
     url: await storageService.createAccessUrl(
-      practiceImageKey(media.objectKey),
+      audio
+        ? practiceAudioKey(media.objectKey)
+        : practiceImageKey(media.objectKey),
     ),
     expiresInMinutes: env.MEDIA_ACCESS_URL_MINUTES,
   };
